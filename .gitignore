@@ -65,6 +65,9 @@ coverage/
 !.vscode/launch.json
 !.vscode/extensions.json
 
+# ---- Rust (backend/) ----
+backend/target/
+
 # ---- Misc ----
 .temp
 .tmp
