@@ -24,6 +24,13 @@ export class SuggestionsRepository {
     return this.prisma.suggestionSnapshot.findFirst({ where: { id, userId } });
   }
 
+  update(id: string, userId: string, analysis: string, suggestions: Suggestion[]) {
+    return this.prisma.suggestionSnapshot.updateMany({
+      where: { id, userId },
+      data: { analysis, suggestions },
+    });
+  }
+
   delete(id: string, userId: string) {
     return this.prisma.suggestionSnapshot.deleteMany({ where: { id, userId } });
   }

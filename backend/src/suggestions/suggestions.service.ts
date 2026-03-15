@@ -48,7 +48,21 @@ export class SuggestionsService {
   async refresh(id: string, userId: string): Promise<SuggestionsResponse> {
     const existing = await this.repo.findById(id, userId);
     if (!existing) throw new BadRequestException(`Snapshot ${id} not found`);
-    return this.getSuggestions(existing.riskPct, userId);
+
+    const riskPct = existing.riskPct;
+    const riskAppetite = riskToAppetite(riskPct);
+    try {
+      const coins = await this.marketData.getTopCoins();
+      const scoredData = await this.attachSignals(coins);
+      scoredData.sort((a, b) => (b.signalScore ?? 0) - (a.signalScore ?? 0));
+      const result = await this.suggestionEngine.suggest({ riskPct, riskAppetite, marketData: scoredData });
+      await this.repo.update(id, userId, result.analysis, result.suggestions);
+      return { ...result, id, riskPct, createdAt: existing.createdAt.toISOString() };
+    } catch (err) {
+      const msg = (err as Error).message;
+      this.logger.warn(`Refresh suggestions failed: ${msg}`);
+      throw new BadRequestException(msg);
+    }
   }
 
   async getHistory(userId: string): Promise<SnapshotSummary[]> {

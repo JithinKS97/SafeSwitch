@@ -126,6 +126,64 @@ export class BinanceService {
     return { fillPrice, fillQty };
   }
 
+  /**
+   * Fetch more than 1000 candles by paginating backwards from now.
+   * Uses a small delay between pages to respect Binance rate limits.
+   * Zero cost — Binance public endpoint.
+   */
+  async getCandlesPaginated(
+    pair: string,
+    interval: CandleInterval,
+    total: number,
+    delayMs = 300,
+  ): Promise<Candle[]> {
+    if (total <= 1000) return this.getCandles(pair, interval, total);
+
+    const symbol = toSymbol(pair);
+    const pages: Candle[][] = [];
+    let endTime: number | undefined;
+    let remaining = total;
+
+    while (remaining > 0) {
+      const limit = Math.min(remaining, 1000);
+      const params = new URLSearchParams({ symbol, interval, limit: String(limit) });
+      if (endTime !== undefined) params.set('endTime', String(endTime));
+      const url = `${BASE}/klines?${params.toString()}`;
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Binance klines failed for ${pair}: ${res.status}`);
+
+      const raw = (await res.json()) as unknown[][];
+      if (!raw.length) break;
+
+      const batch: Candle[] = raw.map((k) => ({
+        time: k[0] as number,
+        open: parseFloat(k[1] as string),
+        high: parseFloat(k[2] as string),
+        low: parseFloat(k[3] as string),
+        close: parseFloat(k[4] as string),
+        volume: parseFloat(k[5] as string),
+      }));
+
+      pages.unshift(batch); // prepend so oldest comes first
+      endTime = batch[0].time - 1; // next page ends just before this batch's oldest candle
+      remaining -= batch.length;
+      if (batch.length < limit) break; // reached start of available history
+
+      if (remaining > 0) await new Promise((r) => setTimeout(r, delayMs));
+    }
+
+    // Flatten and deduplicate by time
+    const seen = new Set<number>();
+    const result: Candle[] = [];
+    for (const batch of pages) {
+      for (const c of batch) {
+        if (!seen.has(c.time)) { seen.add(c.time); result.push(c); }
+      }
+    }
+    return result;
+  }
+
   // Returns candles for multiple pairs, silently skipping any that fail
   async getCandlesForPairs(
     pairs: string[],

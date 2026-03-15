@@ -128,6 +128,42 @@ All engines implement clean interfaces with NestJS DI tokens, making each indepe
 
 Swap any implementation by changing a single line in the module's provider binding.
 
+### Backtest Engine (`src/backtest/`)
+
+The backtest engine replays the signal engine against historical Binance candles to validate whether the thresholds and weights actually produce profitable decisions — **zero AI calls, zero cost**.
+
+**How it works:**
+
+1. Fetches historical 1h + 4h candles via Binance's free public endpoint (paginated, up to 90 days)
+2. Walks forward candle-by-candle from a 200-candle warmup point
+3. At each step, computes the full worksheet (including 4h enrichment) from only the candles seen so far — no look-ahead
+4. Applies the same deterministic entry/exit rules as the live agent
+5. Records every simulated trade with entry signal score, label, regime, and 4h trend at entry time
+6. Aggregates win rates broken down by signal label, regime, and score band
+
+**What it tells you:**
+
+| Breakdown | What to learn |
+|---|---|
+| By signal label | Does `STRONG_BUY` actually outperform `BUY`? |
+| By regime | Do trending or ranging market entries win more? |
+| By score band | Is `80+` meaningfully better than `72-80`? |
+
+The `summary.suggestedThresholds` field returns data-driven threshold recommendations based on the backtest results — these can replace the hardcoded values in `makeDecisions()`.
+
+**API:**
+```
+POST /backtest/run
+{
+  "pairs": ["BTC/USDT", "ETH/USDT"],
+  "daysBack": 30,          // 7–90, default 30
+  "riskAppetite": "MEDIUM", // LOW | MEDIUM | HIGH
+  "direction": "BOTH"       // LONG | SHORT | BOTH
+}
+```
+
+Limits: max 10 pairs, max 90 days. Binance rate limits respected with 300ms delay between paginated pages and 500ms between pairs.
+
 ---
 
 ## Getting Started
