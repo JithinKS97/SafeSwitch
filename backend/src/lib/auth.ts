@@ -67,4 +67,17 @@ export const auth = betterAuth({
     'http://127.0.0.1:3001',
     ...(process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()) : []),
   ],
+  advanced: process.env.CORS_ORIGINS
+    ? {
+        useSecureCookies: true,
+        crossSubDomainCookies: {
+          enabled: true,
+          domain: 'up.railway.app',
+        },
+        defaultCookieAttributes: {
+          sameSite: 'none' as const,
+          secure: true,
+        },
+      }
+    : undefined,
 });
