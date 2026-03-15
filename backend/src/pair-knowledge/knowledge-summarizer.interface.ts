@@ -18,5 +18,5 @@ export interface KnowledgeSummarizer {
    * Produce a short summary (1-3 sentences) of what the agent has learned about this pair
    * from the given journal entries. Represents the agent's understanding / confidence.
    */
-  summarise(pair: string, entries: JournalEntryForSummary[], confidence: number): Promise<string>
+  summarise(pair: string, entries: JournalEntryForSummary[], confidence: number, userId: string): Promise<string>
 }

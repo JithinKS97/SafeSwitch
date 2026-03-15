@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -179,6 +180,18 @@ model Trade {
   position   Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
 
   @@map("trades")
+}
+
+model UserAiKey {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  apiKey       String   // Encrypted at rest
+  apiKeyMasked String   // Last 4 chars for display, e.g. "...xyz1"
+  model        String   @default("openai/gpt-4o-mini")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("user_ai_keys")
 }
 
 // ─── Enums ───────────────────────────────────────────────────────────────────

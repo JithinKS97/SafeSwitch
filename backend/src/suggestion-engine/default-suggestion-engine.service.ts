@@ -13,7 +13,7 @@ export class DefaultSuggestionEngineService implements SuggestionEngine {
 
   async suggest(input: SuggestionInput): Promise<SuggestionOutput> {
     const prompt = this.buildPrompt(input);
-    const response = await this.ai.complete(prompt);
+    const response = await this.ai.complete(prompt, input.userId);
     return this.parseResponse(response, input.riskAppetite);
   }
 

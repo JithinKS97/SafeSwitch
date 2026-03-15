@@ -62,6 +62,44 @@ export type SchedulerStatus = {
 // Score thresholds for entering a position by risk appetite
 const ENTER_THRESHOLD: Record<string, number> = { LOW: 72, MEDIUM: 65, HIGH: 58 };
 
+// ─── Instruction modifiers ────────────────────────────────────────────────────
+
+type InstructionModifiers = {
+  enterDelta: number;   // added to enter threshold — positive = harder to enter
+  exitDelta: number;    // added to exit score thresholds — positive = exit sooner
+};
+
+/**
+ * Parse plain-text instruction into numeric modifiers that affect the signal
+ * thresholds in makeDecisions(). Pair-level instructions override global ones
+ * when both match the same axis.
+ *
+ * Enter threshold (base: LOW=72, MEDIUM=65, HIGH=58):
+ *   conservative / cautious / careful   → +10 (requires stronger signal to enter)
+ *   aggressive / bold                   → −8  (enters on weaker signals)
+ *   strong signal / high confidence     → +8
+ *   quick / scalp                       → −5
+ *
+ * Exit thresholds (bases: reversal=32, nearExit=45, 4hReversal=48):
+ *   quick profit / exit quickly / scalp → +10 (exits sooner)
+ *   hold longer / patient / hold        → −10 (holds through dips)
+ *   conservative / cautious             → +5  (takes profits early)
+ */
+function parseInstructionModifiers(instruction: string): InstructionModifiers {
+  const t = instruction.toLowerCase();
+  let enterDelta = 0;
+  let exitDelta = 0;
+
+  if (/\b(conservative|cautious|careful)\b/.test(t)) { enterDelta += 10; exitDelta += 5; }
+  if (/\b(aggressive|bold)\b/.test(t))                { enterDelta -= 8; }
+  if (/\b(strong signal|strong signals|high confidence)\b/.test(t)) { enterDelta += 8; }
+  if (/\b(quick profit|exit quickly|take profit quickly|scalp)\b/.test(t)) { exitDelta += 10; }
+  if (/\b(hold longer|hold|patient)\b/.test(t))       { exitDelta -= 10; }
+  if (/\bquick\b/.test(t) && !/quick profit/.test(t)) { enterDelta -= 5; }
+
+  return { enterDelta, exitDelta };
+}
+
 @Injectable()
 export class TradingAgentService {
   private readonly logger = new Logger(TradingAgentService.name);
@@ -197,6 +235,7 @@ export class TradingAgentService {
       openPositions,
       worksheetMap,
       priceMap,
+      userInstruction,
     );
 
     // 6. Execute enter decisions
@@ -263,7 +302,7 @@ export class TradingAgentService {
     const journalPrompt = this.buildJournalPrompt(
       cycleNum, userInstruction, decisions, pairJournals, recentJournal,
     );
-    const rawJournal = await this.ai.complete(journalPrompt);
+    const rawJournal = await this.ai.complete(journalPrompt, userId);
     const journal = rawJournal.trim() || 'Agent completed cycle with no written reflection.';
 
     // 10. Save cycle journal
@@ -284,14 +323,16 @@ export class TradingAgentService {
    * No AI is involved — same inputs always produce the same decisions.
    */
   private makeDecisions(
-    watchingPositions: Array<{ id: string; pair: string; direction: string; riskAppetite: string; mode?: string }>,
-    openPositions: Array<{ id: string; pair: string; direction: string; entryPrice: number | null; activatedAt: Date | null; amount?: number; mode?: string }>,
+    watchingPositions: Array<{ id: string; pair: string; direction: string; riskAppetite: string; mode?: string; instruction?: string }>,
+    openPositions: Array<{ id: string; pair: string; direction: string; entryPrice: number | null; activatedAt: Date | null; amount?: number; mode?: string; instruction?: string }>,
     worksheetMap: Map<string, PairWorksheet>,
     priceMap: Record<string, number>,
+    globalInstruction = '',
   ): SignalDecisions {
     const enter: EnterDecision[] = [];
     const close: CloseDecision[] = [];
     const actedPairs = new Set<string>();
+    const globalMods = parseInstructionModifiers(globalInstruction);
 
     // ── Enter decisions ───────────────────────────────────────────────────────
     for (const pos of watchingPositions) {
@@ -300,7 +341,9 @@ export class TradingAgentService {
 
       const dir = pos.direction as 'LONG' | 'SHORT';
       const sig = this.signalEngine.score(pos.pair, ws, dir);
-      const threshold = ENTER_THRESHOLD[pos.riskAppetite] ?? 65;
+      const pairMods = parseInstructionModifiers(pos.instruction ?? '');
+      const enterDelta = (pairMods.enterDelta || globalMods.enterDelta);
+      const threshold = Math.min(90, Math.max(40, (ENTER_THRESHOLD[pos.riskAppetite] ?? 65) + enterDelta));
 
       // 4h gate: block entry if 4h trend strongly opposes direction
       const stronglyOpposed =
@@ -324,6 +367,11 @@ export class TradingAgentService {
 
       const dir = pos.direction as 'LONG' | 'SHORT';
       const sig = this.signalEngine.score(pos.pair, ws, dir);
+      const pairMods = parseInstructionModifiers(pos.instruction ?? '');
+      const exitDelta = (pairMods.exitDelta || globalMods.exitDelta);
+      const reversalThreshold = 32 + exitDelta;
+      const nearExitThreshold = 45 + exitDelta;
+      const fourHThreshold = 48 + exitDelta;
 
       const currentPrice = priceMap[pos.pair] ?? 0;
       const entryPrice = pos.entryPrice ?? currentPrice;
@@ -348,17 +396,17 @@ export class TradingAgentService {
       let closeReasonText = '';
 
       // Strong reversal — exit regardless of PnL
-      if (sig.score < 32) {
+      if (sig.score < reversalThreshold) {
         closeReason = pnlPct >= 0 ? 'PROFIT_TARGET' : 'DRAWDOWN_LIMIT';
         closeReasonText = `Strong reversal signal (score ${sig.score}). ${sig.summary}`;
       }
       // Momentum fading near target while in profit — take it
-      else if (pnlPct > 0 && sig.score < 45 && nearExit) {
+      else if (pnlPct > 0 && sig.score < nearExitThreshold && nearExit) {
         closeReason = 'PROFIT_TARGET';
         closeReasonText = `Score faded to ${sig.score} while near ${dir === 'LONG' ? 'resistance' : 'support'} with pnl +${pnlPct.toFixed(2)}%. ${sig.summary}`;
       }
       // 4h has reversed against us and signal is weakening
-      else if (fourHReversed && sig.score < 48) {
+      else if (fourHReversed && sig.score < fourHThreshold) {
         closeReason = pnlPct >= 0 ? 'PROFIT_TARGET' : 'DRAWDOWN_LIMIT';
         closeReasonText = `4h trend reversed against ${dir} and signal at ${sig.score}. ${sig.summary}`;
       }

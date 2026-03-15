@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { AiKeysService } from '../ai-keys/ai-keys.service';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -6,13 +7,27 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export class AiService {
   private readonly logger = new Logger(AiService.name);
 
-  async complete(prompt: string): Promise<string> {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey || apiKey === 'sk-or-your-key-here') {
-      throw new Error('OPENROUTER_API_KEY is not configured');
+  constructor(
+    @Inject(forwardRef(() => AiKeysService))
+    private readonly aiKeys: AiKeysService,
+  ) {}
+
+  async complete(prompt: string, userId?: string): Promise<string> {
+    let apiKey: string;
+    let model: string;
+
+    if (userId) {
+      const userKey = await this.aiKeys.getDecryptedKey(userId);
+      if (userKey) {
+        apiKey = userKey.apiKey;
+        model = userKey.model;
+      } else {
+        throw new Error('No OpenRouter API key configured. Add your key in Config → AI Model.');
+      }
+    } else {
+      throw new Error('No OpenRouter API key configured. Add your key in Config → AI Model.');
     }
 
-    const model = process.env.OPENROUTER_MODEL ?? 'openai/gpt-4o-mini';
     this.logger.log(`Calling OpenRouter model: ${model}`);
 
     const res = await fetch(OPENROUTER_URL, {
@@ -40,9 +55,7 @@ export class AiService {
     };
 
     const content = data.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error('OpenRouter returned an empty response');
-    }
+    if (!content) throw new Error('OpenRouter returned an empty response');
 
     return content;
   }

@@ -25,6 +25,7 @@ export function SuggestPage() {
   const [added, setAdded] = useState<Set<string>>(new Set())
 
   const { data: positions = [] } = useQuery({ queryKey: ['positions'], queryFn: api.positions.list })
+  const { data: aiKeysStatus } = useQuery({ queryKey: ['aiKeys'], queryFn: api.aiKeys.getStatus })
   const activePairs = new Set(
     positions.filter((p) => p.status === 'INACTIVE' || p.status === 'ACTIVE').map((p) => p.pair)
   )
@@ -153,9 +154,14 @@ export function SuggestPage() {
               <span>Conservative</span>
               <span>Aggressive</span>
             </div>
+            {aiKeysStatus && !aiKeysStatus.hasKeys && (
+              <p className="mb-2 text-xs text-red-500">
+                Add your OpenRouter API key in Config to run analysis.
+              </p>
+            )}
             <button
               onClick={() => getSuggestions.mutate(triggerRisk)}
-              disabled={getSuggestions.isPending}
+              disabled={getSuggestions.isPending || !aiKeysStatus?.hasKeys}
               className="w-full rounded bg-zinc-900 dark:bg-zinc-100 px-3 py-2 text-xs font-medium text-white dark:text-zinc-900 transition hover:bg-zinc-700 dark:hover:bg-zinc-300 disabled:opacity-40"
             >
               {getSuggestions.isPending ? 'Analysing…' : 'Analyse market'}

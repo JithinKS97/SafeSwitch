@@ -35,7 +35,7 @@ export class SuggestionsService {
       // Sort by signal score descending so the LLM sees the strongest signals first
       scoredData.sort((a, b) => (b.signalScore ?? 0) - (a.signalScore ?? 0));
 
-      const result = await this.suggestionEngine.suggest({ riskPct, riskAppetite, marketData: scoredData });
+      const result = await this.suggestionEngine.suggest({ userId, riskPct, riskAppetite, marketData: scoredData });
       const saved = await this.repo.save(userId, riskPct, result.analysis, result.suggestions);
       return { ...result, id: saved.id, createdAt: saved.createdAt.toISOString() };
     } catch (err) {
@@ -55,7 +55,7 @@ export class SuggestionsService {
       const coins = await this.marketData.getTopCoins();
       const scoredData = await this.attachSignals(coins);
       scoredData.sort((a, b) => (b.signalScore ?? 0) - (a.signalScore ?? 0));
-      const result = await this.suggestionEngine.suggest({ riskPct, riskAppetite, marketData: scoredData });
+      const result = await this.suggestionEngine.suggest({ userId, riskPct, riskAppetite, marketData: scoredData });
       await this.repo.update(id, userId, result.analysis, result.suggestions);
       return { ...result, id, riskPct, createdAt: existing.createdAt.toISOString() };
     } catch (err) {

@@ -7,6 +7,7 @@ import { SuggestionsModule } from './suggestions/suggestions.module';
 import { TradingAgentModule } from './agent/trading-agent.module';
 import { UserModule } from './user/user.module';
 import { BinanceKeysModule } from './binance-keys/binance-keys.module';
+import { AiKeysModule } from './ai-keys/ai-keys.module';
 import { BacktestModule } from './backtest/backtest.module';
 import { auth } from './lib/auth';
 
@@ -26,6 +27,7 @@ import { auth } from './lib/auth';
     TradingAgentModule,
     UserModule,
     BinanceKeysModule,
+    AiKeysModule,
     BacktestModule,
   ],
 })

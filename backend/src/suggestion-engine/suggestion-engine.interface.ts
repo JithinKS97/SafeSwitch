@@ -25,6 +25,7 @@ export type ScoredMarketDataPoint = MarketDataPoint & {
 }
 
 export type SuggestionInput = {
+  userId: string
   riskPct: number
   riskAppetite: RiskAppetite
   /** Market data, optionally pre-ranked by signal score (highest first). */

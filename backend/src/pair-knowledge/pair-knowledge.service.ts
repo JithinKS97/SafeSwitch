@@ -113,6 +113,7 @@ export class PairKnowledgeEngineService implements PairKnowledgeEngine {
       pair,
       entriesForSummary,
       journal.confidence,
+      journal.userId,
     );
     if (summarisedKnowledge) {
       await this.prisma.pairJournal.update({

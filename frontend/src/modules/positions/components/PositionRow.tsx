@@ -155,9 +155,11 @@ function PairJournalModal({
 export function PositionRow({
   position,
   pairJournal,
+  hasBinanceKeys,
 }: {
   position: Position
   pairJournal: PairJournal | null
+  hasBinanceKeys: boolean
 }) {
   const qc = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
@@ -335,7 +337,14 @@ export function PositionRow({
               <>
                 {position.mode === 'PAPER' ? (
                   <button
-                    onClick={() => { setLiveAmount(''); setGoLiveModalOpen(true) }}
+                    onClick={() => {
+                      if (!hasBinanceKeys) {
+                        alert('Add your Binance API keys first (Config → Binance API) to enable live trading.')
+                        return
+                      }
+                      setLiveAmount('')
+                      setGoLiveModalOpen(true)
+                    }}
                     disabled={switchMode.isPending}
                     title={
                       pairJournal && pairJournal.confidence >= 70

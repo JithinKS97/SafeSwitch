@@ -12,6 +12,7 @@ export class DefaultKnowledgeSummarizerService implements KnowledgeSummarizer {
     pair: string,
     entries: JournalEntryForSummary[],
     confidence: number,
+    userId: string,
   ): Promise<string> {
     if (entries.length === 0) return '';
 
@@ -45,7 +46,7 @@ Write 2-4 concise sentences that capture what the agent thinks it has learned ab
 
 Write in third person ("The agent has learned...", "The agent feels..."). Be specific and factual. No fluff.`;
 
-      const raw = await this.ai.complete(prompt);
+      const raw = await this.ai.complete(prompt, userId);
       return raw.trim().slice(0, 1000); // cap length
     } catch (err) {
       this.logger.warn(`Knowledge summarization failed: ${(err as Error).message}`);

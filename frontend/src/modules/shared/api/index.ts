@@ -127,6 +127,16 @@ export const api = {
   user: {
     clearAllData: () => request<void>('/user/data', { method: 'DELETE' }),
   },
+  aiKeys: {
+    getStatus: () =>
+      request<{ hasKeys: boolean; apiKeyMasked?: string; model?: string }>('/ai-keys'),
+    addOrUpdate: (apiKey: string, model: string) =>
+      request<{ hasKeys: true; apiKeyMasked: string; model: string }>('/ai-keys', {
+        method: 'PUT',
+        body: JSON.stringify({ apiKey, model }),
+      }),
+    remove: () => request<void>('/ai-keys', { method: 'DELETE' }),
+  },
   binanceKeys: {
     getStatus: () =>
       request<{ hasKeys: boolean; apiKeyMasked?: string }>('/binance-keys'),

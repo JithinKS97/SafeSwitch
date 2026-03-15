@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '../shared/api'
 import { PositionRow } from './components/PositionRow'
-import { BinanceKeysModal } from './components/BinanceKeysModal'
 import { EditDisplaySaveModal } from '@/components/ui/edit-display-save-modal'
 import type { SchedulerStatus } from '../shared/api'
 
@@ -50,31 +49,9 @@ export function PositionsPage() {
   })
 
   const [instructionModalOpen, setInstructionModalOpen] = useState(false)
-  const [binanceKeysModalOpen, setBinanceKeysModalOpen] = useState(false)
 
   const setInstruction = useMutation({
     mutationFn: (instruction: string) => api.agent.setInstruction(instruction),
-  })
-
-  const addBinanceKeys = useMutation({
-    mutationFn: ({ apiKey, apiSecret }: { apiKey: string; apiSecret: string }) =>
-      api.binanceKeys.addOrUpdate(apiKey, apiSecret),
-    onSuccess: (data) => {
-      qc.setQueryData(['binanceKeys'], data)
-      setBinanceKeysModalOpen(false)
-      toast.success('Binance API keys saved')
-    },
-    onError: (e) => toast.error(e.message),
-  })
-
-  const removeBinanceKeys = useMutation({
-    mutationFn: () => api.binanceKeys.remove(),
-    onSuccess: () => {
-      qc.setQueryData(['binanceKeys'], { hasKeys: false })
-      setBinanceKeysModalOpen(false)
-      toast.success('Binance API keys removed')
-    },
-    onError: (e) => toast.error(e.message),
   })
 
   const setScheduler = useMutation({
@@ -157,38 +134,15 @@ export function PositionsPage() {
           )}
         </div>
 
-        <div className="flex flex-wrap gap-4">
-          <button
-            onClick={() => setInstructionModalOpen(true)}
-            className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 underline underline-offset-2"
-          >
-            {instructionData?.instruction
-              ? `Goal: ${instructionData.instruction.slice(0, 50)}${instructionData.instruction.length > 50 ? '…' : ''}`
-              : 'Set your goal / instruction'}
-          </button>
-          <button
-            onClick={() => setBinanceKeysModalOpen(true)}
-            className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 underline underline-offset-2"
-          >
-            {binanceKeysStatus?.hasKeys
-              ? `Binance API: ${binanceKeysStatus.apiKeyMasked ?? 'configured'}`
-              : 'Add Binance API keys'}
-          </button>
-        </div>
+        <button
+          onClick={() => setInstructionModalOpen(true)}
+          className="self-start text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 underline underline-offset-2"
+        >
+          {instructionData?.instruction
+            ? `Goal: ${instructionData.instruction.slice(0, 50)}${instructionData.instruction.length > 50 ? '…' : ''}`
+            : 'Set your goal / instruction'}
+        </button>
       </div>
-
-      {/* Binance API keys modal */}
-      {binanceKeysModalOpen && (
-        <BinanceKeysModal
-          hasKeys={binanceKeysStatus?.hasKeys ?? false}
-          apiKeyMasked={binanceKeysStatus?.apiKeyMasked}
-          onAdd={(apiKey, apiSecret) => addBinanceKeys.mutate({ apiKey, apiSecret })}
-          onRemove={() => removeBinanceKeys.mutate()}
-          onClose={() => setBinanceKeysModalOpen(false)}
-          isAdding={addBinanceKeys.isPending}
-          isRemoving={removeBinanceKeys.isPending}
-        />
-      )}
 
       {/* Goal / instruction modal */}
       {instructionModalOpen && (
@@ -294,6 +248,7 @@ export function PositionsPage() {
                   key={p.id}
                   position={p}
                   pairJournal={pairJournalByPair[p.pair] ?? null}
+                  hasBinanceKeys={binanceKeysStatus?.hasKeys ?? false}
                 />
               ))}
             </tbody>
