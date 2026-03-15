@@ -21,6 +21,12 @@ export class PositionsRepository {
     });
   }
 
+  findActiveByPair(pair: string) {
+    return this.prisma.position.findFirst({
+      where: { pair, status: { in: ['INACTIVE', 'ACTIVE'] } },
+    });
+  }
+
   create(dto: CreatePositionDto) {
     return this.prisma.position.create({
       data: {
@@ -57,6 +63,10 @@ export class PositionsRepository {
         closedAt: new Date(),
       },
     });
+  }
+
+  delete(id: string) {
+    return this.prisma.position.delete({ where: { id } });
   }
 
   updateConfidence(id: string, confidence: number, pnl: number) {

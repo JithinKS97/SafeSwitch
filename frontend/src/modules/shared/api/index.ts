@@ -1,4 +1,4 @@
-const BASE = 'http://localhost:3001'
+const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 
 export type RiskAppetite = 'LOW' | 'MEDIUM' | 'HIGH'
 export type TradeDirection = 'LONG' | 'SHORT'
@@ -58,6 +58,8 @@ export const api = {
       }),
     stop: (id: string) =>
       request<Position>(`/positions/${id}/stop`, { method: 'POST' }),
+    delete: (id: string) =>
+      request<void>(`/positions/${id}`, { method: 'DELETE' }),
   },
   suggestions: {
     get: (riskAppetite: RiskAppetite) =>

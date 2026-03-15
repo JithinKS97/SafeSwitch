@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -47,5 +48,11 @@ export class PositionsController {
   @HttpCode(HttpStatus.OK)
   stop(@Param('id') id: string) {
     return this.service.stop(id);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  delete(@Param('id') id: string) {
+    return this.service.delete(id);
   }
 }

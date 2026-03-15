@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PositionStatus, TradingMode, CloseReason } from '../common/types/enums';
 import { PositionsRepository } from './positions.repository';
@@ -21,7 +22,11 @@ export class PositionsService {
     return position;
   }
 
-  create(dto: CreatePositionDto) {
+  async create(dto: CreatePositionDto) {
+    const existing = await this.repo.findActiveByPair(dto.pair);
+    if (existing) {
+      throw new ConflictException(`${dto.pair} is already an active position`);
+    }
     return this.repo.create(dto);
   }
 
@@ -59,5 +64,10 @@ export class PositionsService {
     }
 
     return this.repo.stop(id, CloseReason.MANUAL);
+  }
+
+  async delete(id: string) {
+    await this.findById(id);
+    return this.repo.delete(id);
   }
 }
