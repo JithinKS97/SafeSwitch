@@ -12,6 +12,7 @@ import { CloseReason } from '../common/types/enums';
 type AgentDecision = {
   enter: Array<{ id: string; reasoning?: string }>;
   close: Array<{ id: string; reason: 'PROFIT_TARGET' | 'DRAWDOWN_LIMIT'; reasoning?: string }>;
+  observe?: Array<{ pair: string; thoughts: string }>;
 };
 
 export type CycleResult = {
@@ -157,7 +158,7 @@ export class TradingAgentService {
 
     // 7. Call AI
     const raw = await this.ai.complete(prompt);
-    const { decisions, journal } = this.parseResponse(raw);
+    const { decisions, journal } = this.parseResponse(raw, allPairs);
 
     // 8. Execute decisions
     const opened: string[] = [];
@@ -210,7 +211,7 @@ export class TradingAgentService {
       );
     }
 
-    // 9. Add OBSERVE entry for each pair that had no ENTER/EXIT this cycle (price check every interval)
+    // 9. Add OBSERVE entry for each pair that had no ENTER/EXIT this cycle (price + agent thoughts)
     const pairsWithAction = new Set([
       ...decisions.enter.map((e) => {
         const pos = watchingPositions.find((p) => p.id === e.id);
@@ -221,10 +222,17 @@ export class TradingAgentService {
         return pos?.pair;
       }).filter(Boolean),
     ]);
+    const observeByPair = new Map(
+      (decisions.observe ?? []).map((o) => [o.pair, o.thoughts]),
+    );
     for (const pair of allPairs) {
       if (!pairsWithAction.has(pair)) {
         const price = priceMap[pair] ?? 0;
-        await this.pairKnowledge.addObservation(userId, pair, cycleNum, price);
+        const thoughts = observeByPair.get(pair);
+        const reasoning = thoughts?.trim()
+          ? `${thoughts} (Price: ${price})`
+          : `Price: ${price}`;
+        await this.pairKnowledge.addObservation(userId, pair, cycleNum, price, reasoning);
       }
     }
 
@@ -382,19 +390,21 @@ ${candleSection}
 4. When a pair has an "instruction", factor it into your decision (e.g. "prefer longer holds", "exit quickly on any profit", "be conservative").
 5. Do NOT invent new pairs — only act on the IDs listed above.
 6. For EACH enter or close decision, provide a short "reasoning" (1-2 sentences) explaining why. This will be stored in the pair journal for the user to review.
-7. Write a concise journal entry (3-5 sentences) about what you observed and decided.
+7. For EACH pair you are NOT entering or closing, provide a brief "observe" entry with your thoughts (1-2 sentences): what you're seeing — price action, momentum, why you're holding. This will be stored in the pair journal.
+8. Write a concise journal entry (3-5 sentences) about what you observed and decided.
 
 Respond ONLY with valid JSON — no markdown fences, no extra text:
 {
   "decisions": {
     "enter": [{"id": "<position-id>", "reasoning": "Why you're entering now..."}],
-    "close": [{"id": "<position-id>", "reason": "PROFIT_TARGET" | "DRAWDOWN_LIMIT", "reasoning": "Why you're closing now..."}]
+    "close": [{"id": "<position-id>", "reason": "PROFIT_TARGET" | "DRAWDOWN_LIMIT", "reasoning": "Why you're closing now..."}],
+    "observe": [{"pair": "BTC/USDT", "thoughts": "Your brief observation about this pair..."}]
   },
   "journal": "Your reflection here..."
 }`;
   }
 
-  private parseResponse(raw: string): { decisions: AgentDecision; journal: string } {
+  private parseResponse(raw: string, allPairs: string[]): { decisions: AgentDecision; journal: string } {
     const cleaned = raw
       .replace(/```json\s*/gi, '')
       .replace(/```\s*/g, '')
@@ -408,9 +418,17 @@ Respond ONLY with valid JSON — no markdown fences, no extra text:
       decisions?: {
         enter?: Array<{ id?: string; reasoning?: string }>;
         close?: Array<{ id?: string; reason?: string; reasoning?: string }>;
+        observe?: Array<{ pair?: string; thoughts?: string }>;
       };
       journal?: string;
     };
+
+    const observeRaw = parsed.decisions?.observe ?? [];
+    const observe = observeRaw
+      .filter((o): o is { pair: string; thoughts: string } =>
+        typeof o?.pair === 'string' && typeof o?.thoughts === 'string' && allPairs.includes(o.pair),
+      )
+      .map((o) => ({ pair: o.pair, thoughts: o.thoughts.trim() }));
 
     const decisions: AgentDecision = {
       enter: (parsed.decisions?.enter ?? []).map((e) => ({
@@ -422,6 +440,7 @@ Respond ONLY with valid JSON — no markdown fences, no extra text:
         reason: (c?.reason === 'PROFIT_TARGET' || c?.reason === 'DRAWDOWN_LIMIT' ? c.reason : 'DRAWDOWN_LIMIT') as 'PROFIT_TARGET' | 'DRAWDOWN_LIMIT',
         reasoning: typeof c?.reasoning === 'string' ? c.reasoning : undefined,
       })),
+      observe: observe.length > 0 ? observe : undefined,
     };
 
     const journal =
