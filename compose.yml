@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16
+    container_name: safeswitch-db
+    environment:
+      POSTGRES_USER: safeswitch
+      POSTGRES_PASSWORD: safeswitch
+      POSTGRES_DB: safeswitch
+    ports:
+      - "5432:5432"
+    volumes:
+      - safeswitch_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U safeswitch"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  safeswitch_pgdata:

@@ -1,87 +1,167 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { api, Position, TradingMode } from '../lib/api'
 
-export const Route = createFileRoute('/')({ component: App })
+export const Route = createFileRoute('/')({ component: PositionsPage })
 
-function App() {
+const STATUS_STYLE: Record<string, string> = {
+  INACTIVE: 'bg-[var(--line)] text-[var(--sea-ink-soft)]',
+  ACTIVE: 'bg-[rgba(79,184,178,0.18)] text-[var(--lagoon-deep)]',
+  COMPLETED: 'bg-[rgba(47,106,74,0.14)] text-[var(--palm)]',
+  STOPPED: 'bg-[rgba(200,80,80,0.12)] text-red-600',
+}
+
+const DIRECTION_STYLE: Record<string, string> = {
+  LONG: 'text-[var(--palm)]',
+  SHORT: 'text-red-500',
+}
+
+function ConfidenceBar({ value }: { value: number }) {
+  const color = value >= 70 ? 'bg-[var(--lagoon)]' : value >= 40 ? 'bg-yellow-400' : 'bg-[var(--line)]'
   return (
-    <main className="page-wrap px-4 pb-8 pt-14">
-      <section className="island-shell rise-in relative overflow-hidden rounded-[2rem] px-6 py-10 sm:px-10 sm:py-14">
-        <div className="pointer-events-none absolute -left-20 -top-24 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(79,184,178,0.32),transparent_66%)]" />
-        <div className="pointer-events-none absolute -bottom-20 -right-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(47,106,74,0.18),transparent_66%)]" />
-        <p className="island-kicker mb-3">TanStack Start Base Template</p>
-        <h1 className="display-title mb-5 max-w-3xl text-4xl leading-[1.02] font-bold tracking-tight text-[var(--sea-ink)] sm:text-6xl">
-          Start simple, ship quickly.
-        </h1>
-        <p className="mb-8 max-w-2xl text-base text-[var(--sea-ink-soft)] sm:text-lg">
-          This base starter intentionally keeps things light: two routes, clean
-          structure, and the essentials you need to build from scratch.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <a
-            href="/about"
-            className="rounded-full border border-[rgba(50,143,151,0.3)] bg-[rgba(79,184,178,0.14)] px-5 py-2.5 text-sm font-semibold text-[var(--lagoon-deep)] no-underline transition hover:-translate-y-0.5 hover:bg-[rgba(79,184,178,0.24)]"
-          >
-            About This Starter
-          </a>
-          <a
-            href="https://tanstack.com/router"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-full border border-[rgba(23,58,64,0.2)] bg-white/50 px-5 py-2.5 text-sm font-semibold text-[var(--sea-ink)] no-underline transition hover:-translate-y-0.5 hover:border-[rgba(23,58,64,0.35)]"
-          >
-            Router Guide
-          </a>
+    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--line)]">
+      <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${value}%` }} />
+    </div>
+  )
+}
+
+function PositionCard({ position }: { position: Position }) {
+  const qc = useQueryClient()
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['positions'] })
+
+  const activate = useMutation({ mutationFn: () => api.positions.activate(position.id), onSuccess: invalidate })
+  const stop = useMutation({ mutationFn: () => api.positions.stop(position.id), onSuccess: invalidate })
+  const switchMode = useMutation({
+    mutationFn: (mode: TradingMode) => api.positions.switchMode(position.id, mode),
+    onSuccess: invalidate,
+  })
+
+  const isActive = position.status === 'ACTIVE'
+  const isInactive = position.status === 'INACTIVE'
+
+  return (
+    <article className="island-shell rounded-2xl p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-bold text-[var(--sea-ink)]">{position.pair}</span>
+            <span className={`text-xs font-semibold ${DIRECTION_STYLE[position.direction]}`}>
+              {position.direction}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center gap-2 text-xs text-[var(--sea-ink-soft)]">
+            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[position.status]}`}>
+              {position.status}
+            </span>
+            {isActive && (
+              <span className="rounded-full border border-[var(--line)] px-2 py-0.5 text-xs">
+                {position.mode}
+              </span>
+            )}
+            <span className="opacity-60">{position.riskAppetite} risk</span>
+          </div>
         </div>
-      </section>
 
-      <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          [
-            'Type-Safe Routing',
-            'Routes and links stay in sync across every page.',
-          ],
-          [
-            'Server Functions',
-            'Call server code from your UI without creating API boilerplate.',
-          ],
-          [
-            'Streaming by Default',
-            'Ship progressively rendered responses for faster experiences.',
-          ],
-          [
-            'Tailwind Native',
-            'Design quickly with utility-first styling and reusable tokens.',
-          ],
-        ].map(([title, desc], index) => (
-          <article
-            key={title}
-            className="island-shell feature-card rise-in rounded-2xl p-5"
-            style={{ animationDelay: `${index * 90 + 80}ms` }}
+        <div className="text-right">
+          <div className={`text-sm font-semibold ${position.pnl >= 0 ? 'text-[var(--palm)]' : 'text-red-500'}`}>
+            {position.pnl >= 0 ? '+' : ''}{position.pnl.toFixed(2)} USDT
+          </div>
+          {isActive && (
+            <div className="text-xs text-[var(--sea-ink-soft)]">
+              {position.confidence.toFixed(0)}% confidence
+            </div>
+          )}
+        </div>
+      </div>
+
+      {isActive && <ConfidenceBar value={position.confidence} />}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {isInactive && (
+          <button
+            onClick={() => activate.mutate()}
+            disabled={activate.isPending}
+            className="rounded-full bg-[var(--lagoon)] px-4 py-1.5 text-xs font-semibold text-white transition hover:-translate-y-0.5 disabled:opacity-50"
           >
-            <h2 className="mb-2 text-base font-semibold text-[var(--sea-ink)]">
-              {title}
-            </h2>
-            <p className="m-0 text-sm text-[var(--sea-ink-soft)]">{desc}</p>
-          </article>
-        ))}
-      </section>
+            {activate.isPending ? 'Activating…' : 'Activate'}
+          </button>
+        )}
+        {isActive && position.mode === 'PAPER' && (
+          <button
+            onClick={() => switchMode.mutate('LIVE')}
+            disabled={switchMode.isPending}
+            className="rounded-full bg-[var(--palm)] px-4 py-1.5 text-xs font-semibold text-white transition hover:-translate-y-0.5 disabled:opacity-50"
+          >
+            Switch to Live
+          </button>
+        )}
+        {isActive && position.mode === 'LIVE' && (
+          <button
+            onClick={() => switchMode.mutate('PAPER')}
+            disabled={switchMode.isPending}
+            className="rounded-full border border-[var(--line)] px-4 py-1.5 text-xs font-semibold text-[var(--sea-ink)] transition hover:-translate-y-0.5 disabled:opacity-50"
+          >
+            Back to Paper
+          </button>
+        )}
+        {isActive && (
+          <button
+            onClick={() => stop.mutate()}
+            disabled={stop.isPending}
+            className="rounded-full border border-red-200 px-4 py-1.5 text-xs font-semibold text-red-500 transition hover:-translate-y-0.5 disabled:opacity-50"
+          >
+            {stop.isPending ? 'Stopping…' : 'Stop'}
+          </button>
+        )}
+      </div>
+    </article>
+  )
+}
 
-      <section className="island-shell mt-8 rounded-2xl p-6">
-        <p className="island-kicker mb-2">Quick Start</p>
-        <ul className="m-0 list-disc space-y-2 pl-5 text-sm text-[var(--sea-ink-soft)]">
-          <li>
-            Edit <code>src/routes/index.tsx</code> to customize the home page.
-          </li>
-          <li>
-            Update <code>src/components/Header.tsx</code> and{' '}
-            <code>src/components/Footer.tsx</code> for brand links.
-          </li>
-          <li>
-            Add routes in <code>src/routes</code> and tweak visual tokens in{' '}
-            <code>src/styles.css</code>.
-          </li>
-        </ul>
-      </section>
+function PositionsPage() {
+  const { data: positions = [], isLoading, isError } = useQuery({
+    queryKey: ['positions'],
+    queryFn: api.positions.list,
+    refetchInterval: 5000,
+  })
+
+  return (
+    <main className="page-wrap px-4 pb-12 pt-10">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <p className="island-kicker mb-1">Dashboard</p>
+          <h1 className="display-title text-3xl font-bold text-[var(--sea-ink)]">Positions</h1>
+        </div>
+        <Link
+          to="/suggest"
+          className="rounded-full bg-[var(--lagoon-deep)] px-5 py-2 text-sm font-semibold text-white no-underline transition hover:-translate-y-0.5"
+        >
+          + Get Suggestions
+        </Link>
+      </div>
+
+      {isLoading && (
+        <div className="py-20 text-center text-sm text-[var(--sea-ink-soft)]">Loading…</div>
+      )}
+
+      {isError && (
+        <div className="island-shell rounded-2xl p-6 text-center text-sm text-red-500">
+          Could not connect to backend. Make sure the server is running on port 3001.
+        </div>
+      )}
+
+      {!isLoading && !isError && positions.length === 0 && (
+        <div className="island-shell rounded-2xl p-12 text-center">
+          <p className="text-[var(--sea-ink-soft)]">No positions yet.</p>
+          <Link to="/suggest" className="mt-3 inline-block text-sm font-semibold">
+            Get suggestions to add pairs →
+          </Link>
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {positions.map((p) => <PositionCard key={p.id} position={p} />)}
+      </div>
     </main>
   )
 }
