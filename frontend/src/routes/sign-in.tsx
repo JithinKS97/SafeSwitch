@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { authClient, setStoredToken } from '../lib/auth-client'
 
 export const Route = createFileRoute('/sign-in')({
@@ -25,7 +25,6 @@ const FEATURES = [
 ]
 
 function SignInPage() {
-  const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -82,8 +81,8 @@ function SignInPage() {
       if (data) {
         const token = (data as { token?: string }).token
         if (token) setStoredToken(token)
-        console.log('[Auth] signIn success, navigating to /')
-        navigate({ to: '/' })
+        console.log('[Auth] signIn success, redirecting to /')
+        window.location.href = '/'
       } else {
         console.log('[Auth] signIn returned no data, not navigating')
       }
