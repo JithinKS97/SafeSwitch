@@ -102,13 +102,18 @@ export class SuggestionsService {
             volume24h: coin.volume24h,
           };
           try {
-            const candleMap = await this.binance.getCandlesForPairs([coin.pair], '1h', 200);
+            const [candleMap, candle4hMap] = await Promise.all([
+              this.binance.getCandlesForPairs([coin.pair], '1h', 200),
+              this.binance.getCandlesForPairs([coin.pair], '4h', 100),
+            ]);
             const candles = candleMap[coin.pair];
             if (!candles?.length) {
               results[idx] = base;
               return;
             }
-            const ws = this.indicators.compute(0, candles);
+            let ws = this.indicators.compute(0, candles);
+            const c4h = candle4hMap[coin.pair];
+            if (c4h?.length) ws = this.indicators.enrich4h(ws, c4h);
             const long = this.signalEngine.score(coin.pair, ws, 'LONG');
             const short = this.signalEngine.score(coin.pair, ws, 'SHORT');
             const best = long.score >= short.score ? long : short;

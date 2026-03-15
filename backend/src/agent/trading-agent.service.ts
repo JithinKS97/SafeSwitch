@@ -133,7 +133,10 @@ export class TradingAgentService {
       ? await this.pairKnowledge.findForPairs(userId, allPairs)
       : [];
 
-    const candlesMap = await this.binance.getCandlesForPairs(allPairs, '1h', 200);
+    const [candlesMap, candles4hMap] = await Promise.all([
+      this.binance.getCandlesForPairs(allPairs, '1h', 200),
+      this.binance.getCandlesForPairs(allPairs, '4h', 100),
+    ]);
 
     const priceMap: Record<string, number> = {};
     await Promise.all(
@@ -147,13 +150,15 @@ export class TradingAgentService {
       }),
     );
 
-    // 6. Compute mathematical worksheets from candles
+    // 6. Compute mathematical worksheets from 1h candles, then enrich with 4h context
     const worksheetMap = new Map<string, PairWorksheet>();
     for (const pair of allPairs) {
       const candles = candlesMap[pair];
-      if (candles?.length) {
-        worksheetMap.set(pair, this.indicators.compute(cycleNum, candles));
-      }
+      if (!candles?.length) continue;
+      let ws = this.indicators.compute(cycleNum, candles);
+      const c4h = candles4hMap[pair];
+      if (c4h?.length) ws = this.indicators.enrich4h(ws, c4h);
+      worksheetMap.set(pair, ws);
     }
 
     // 7. Persist worksheets so they're available outside of agent cycles
@@ -406,10 +411,13 @@ export class TradingAgentService {
                     `    RSI(14)=${ws.indicators.rsi14} | EMA trend=${ws.indicators.emaTrend} (ema20=${ws.indicators.ema20} vs ema50=${ws.indicators.ema50})`,
                     `    MACD histogram=${ws.indicators.macdHistogram > 0 ? '+' : ''}${ws.indicators.macdHistogram} (${ws.indicators.macdHistogram > 0 ? 'bullish' : ws.indicators.macdHistogram < 0 ? 'bearish' : 'neutral'} momentum)`,
                     `    Bollinger: price at ${(ws.indicators.bbPosition * 100).toFixed(0)}% of band [${ws.indicators.bbLower}–${ws.indicators.bbUpper}]`,
-                    `    Volume ratio=${ws.indicators.volumeRatio}x avg | ATR(14)=${ws.indicators.atr14} (${ws.model.volatilityPct}% volatility)`,
+                    `    ADX(14)=${ws.indicators.adx14} (${ws.indicators.adxTrend}) | Volume ratio=${ws.indicators.volumeRatio}x avg | ATR(14)=${ws.indicators.atr14} (${ws.model.volatilityPct}% volatility)`,
                     `  Trend model (20-candle regression):`,
                     `    Slope=${ws.model.trendSlope > 0 ? '+' : ''}${ws.model.trendSlope}/candle | R²=${ws.model.trendR2} | predicted next close=${ws.model.predictedNext}`,
-                    `    Support=${ws.model.supportLevel} | Resistance=${ws.model.resistanceLevel}`,
+                    `    Swing support=${ws.model.supportLevel} | Swing resistance=${ws.model.resistanceLevel}`,
+                    ws.context
+                      ? `  4h context: trend=${ws.context.trend4h} | ADX=${ws.context.adx4h} | EMA20=${ws.context.ema20_4h} vs EMA50=${ws.context.ema50_4h}`
+                      : '',
                   ].filter(Boolean).join('\n')
                 : '  No worksheet computed yet.';
 
