@@ -1,16 +1,13 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
-import { createServerFn } from '@tanstack/react-start'
-import { auth } from '@clerk/tanstack-react-start/server'
 import Header from '../modules/shared/components/Header'
 import Footer from '../modules/shared/components/Footer'
-
-const requireAuth = createServerFn().handler(async () => {
-  const { userId } = await auth()
-  if (!userId) throw redirect({ to: '/sign-in' })
-})
+import { getSession } from '../lib/auth.functions'
 
 export const Route = createFileRoute('/_authenticated')({
-  beforeLoad: () => requireAuth(),
+  beforeLoad: async () => {
+    const session = await getSession()
+    if (!session?.user) throw redirect({ to: '/sign-in' })
+  },
   component: AuthenticatedLayout,
 })
 

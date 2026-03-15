@@ -5,15 +5,38 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+
+  const expressApp = app.getHttpAdapter().getInstance();
+
+  // CORS must run first for cross-origin requests from frontend
+  const allowedOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
+  expressApp.use((req, res, next) => {
+    const origin = req.get('origin');
+    if (origin && allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+    next();
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }),
   );
 
   app.useGlobalFilters(new HttpExceptionFilter());
-  app.enableCors({ origin: 'http://localhost:3000' });
+  app.enableCors({
+    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    credentials: true,
+  });
 
-  await app.listen(process.env.PORT ?? 3001);
+  const port = process.env.PORT ?? 3001;
+  await app.listen(port);
+  console.log(`[Backend] Listening on http://localhost:${port}`);
 }
 bootstrap();

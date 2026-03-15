@@ -49,9 +49,10 @@ describe('PositionRow', () => {
   beforeEach(() => vi.clearAllMocks())
 
   describe('INACTIVE position', () => {
-    it('shows Pause button', () => {
+    it('shows Pause and Instruction buttons', () => {
       renderRow(base)
       expect(screen.getByText('Pause')).toBeInTheDocument()
+      expect(screen.getByText('Instruction')).toBeInTheDocument()
     })
 
     it('shows Delete button', () => {

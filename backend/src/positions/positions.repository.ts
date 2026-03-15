@@ -110,7 +110,14 @@ export class PositionsRepository {
     });
   }
 
-  closeByAgent(id: string, reason: CloseReason, pnl: number, currentPrice: number) {
+  async closeByAgent(id: string, reason: CloseReason, pnl: number, currentPrice: number) {
+    const pos = await this.prisma.position.findUnique({
+      where: { id },
+      select: { amount: true },
+    });
+    const currentAmount = pos?.amount ?? 0;
+    const newAmount = Math.max(0, currentAmount * (1 + pnl / 100));
+
     return this.prisma.position.update({
       where: { id },
       data: {
@@ -119,6 +126,7 @@ export class PositionsRepository {
         pnl,
         currentPrice,
         closedAt: new Date(),
+        amount: newAmount,
       },
     });
   }
@@ -153,6 +161,13 @@ export class PositionsRepository {
 
   switchMode(id: string, mode: TradingMode) {
     return this.prisma.position.update({ where: { id }, data: { mode } });
+  }
+
+  updateInstruction(id: string, instruction: string) {
+    return this.prisma.position.update({
+      where: { id },
+      data: { instruction },
+    });
   }
 
   stop(id: string, reason: CloseReason) {

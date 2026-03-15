@@ -5,9 +5,9 @@ import { SuggestionsRepository } from './suggestions.repository';
 import { SUGGESTION_ENGINE, type SuggestionEngine } from '../suggestion-engine/suggestion-engine.interface';
 import type { Suggestion, SuggestionsResponse, SnapshotSummary } from './suggestions.types';
 
-function pctToRiskAppetite(pct: number): RiskAppetite {
-  if (pct < 34) return 'LOW';
-  if (pct < 67) return 'MEDIUM';
+function riskToAppetite(risk: number): RiskAppetite {
+  if (risk <= 3) return 'LOW';
+  if (risk <= 6) return 'MEDIUM';
   return 'HIGH';
 }
 
@@ -22,7 +22,7 @@ export class SuggestionsService {
   ) {}
 
   async getSuggestions(riskPct: number, userId: string): Promise<SuggestionsResponse> {
-    const riskAppetite = pctToRiskAppetite(riskPct);
+    const riskAppetite = riskToAppetite(riskPct);
     try {
       const coins = await this.marketData.getTopCoins();
       const marketData = coins.map((c) => ({

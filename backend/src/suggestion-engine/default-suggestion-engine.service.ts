@@ -121,13 +121,13 @@ export class DefaultSuggestionEngineService implements SuggestionEngine {
 
     return `You are a crypto trading advisor. Analyse the market data below and suggest exactly 3 trading pairs.
 
-Risk appetite: ${input.riskPct}% (${input.riskAppetite} — ${riskDescriptions[input.riskAppetite]})
+Risk appetite: ${input.riskPct}/10 (${input.riskAppetite} — ${riskDescriptions[input.riskAppetite]})
 
 Current market data (top 30 by market cap):
 ${marketLines}
 
 Instructions:
-1. Write a short analysis (3-5 sentences) explaining what you observe in the market data and how the risk appetite of ${input.riskPct}% shapes your picks.
+1. Write a short analysis (3-5 sentences) explaining what you observe in the market data and how the risk level (${input.riskPct}/10) shapes your picks.
 2. Then select exactly 3 pairs that best fit this risk level.
 3. For each pair, direction must be "LONG" or "SHORT", riskLevel must be "${input.riskAppetite}".
 

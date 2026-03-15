@@ -17,7 +17,7 @@ const mockCoins: CoinSnapshot[] = [
 const mockSavedSnapshot = {
   id: 'snap-1',
   userId: UID,
-  riskPct: 20,
+  riskPct: 5,
   analysis: 'Market is showing mixed signals.',
   suggestions: [],
   createdAt: new Date('2026-01-01'),
@@ -61,7 +61,7 @@ describe('SuggestionsService', () => {
         ],
       });
 
-      const result = await service.getSuggestions(20, UID);
+      const result = await service.getSuggestions(5, UID);
 
       expect(result.analysis).toBeTruthy();
       expect(result.suggestions).toHaveLength(3);
@@ -79,7 +79,7 @@ describe('SuggestionsService', () => {
         ],
       });
 
-      const result = await service.getSuggestions(80, UID); // HIGH
+      const result = await service.getSuggestions(8, UID); // HIGH
       result.suggestions.forEach((s) => expect(s.riskLevel).toBe('HIGH'));
     });
 
@@ -94,14 +94,14 @@ describe('SuggestionsService', () => {
         ],
       });
 
-      await service.getSuggestions(73, UID);
+      await service.getSuggestions(7, UID);
 
       const input = suggestionEngine.suggest.mock.calls[0][0];
-      expect(input.riskPct).toBe(73);
+      expect(input.riskPct).toBe(7);
       expect(input.marketData).toHaveLength(3);
     });
 
-    it('derives LOW for pct < 34', async () => {
+    it('derives LOW for risk <= 3', async () => {
       marketData.getTopCoins.mockResolvedValue(mockCoins);
       suggestionEngine.suggest.mockResolvedValue({
         analysis: 'Low risk.',
@@ -112,11 +112,11 @@ describe('SuggestionsService', () => {
         ],
       });
 
-      const result = await service.getSuggestions(33, UID);
+      const result = await service.getSuggestions(3, UID);
       result.suggestions.forEach((s) => expect(s.riskLevel).toBe('LOW'));
     });
 
-    it('derives MEDIUM for pct 34–66', async () => {
+    it('derives MEDIUM for risk 4–6', async () => {
       marketData.getTopCoins.mockResolvedValue(mockCoins);
       suggestionEngine.suggest.mockResolvedValue({
         analysis: 'Moderate market conditions.',
@@ -127,7 +127,7 @@ describe('SuggestionsService', () => {
         ],
       });
 
-      const result = await service.getSuggestions(50, UID);
+      const result = await service.getSuggestions(5, UID);
       result.suggestions.forEach((s) => expect(s.riskLevel).toBe('MEDIUM'));
     });
   });
@@ -136,16 +136,16 @@ describe('SuggestionsService', () => {
     it('throws BadRequestException when market data fetch fails', async () => {
       marketData.getTopCoins.mockRejectedValue(new Error('CoinGecko timeout'));
 
-      await expect(service.getSuggestions(20, UID)).rejects.toThrow(BadRequestException);
-      await expect(service.getSuggestions(20, UID)).rejects.toThrow('CoinGecko timeout');
+      await expect(service.getSuggestions(5, UID)).rejects.toThrow(BadRequestException);
+      await expect(service.getSuggestions(5, UID)).rejects.toThrow('CoinGecko timeout');
     });
 
     it('throws BadRequestException when engine throws', async () => {
       marketData.getTopCoins.mockResolvedValue(mockCoins);
       suggestionEngine.suggest.mockRejectedValue(new Error('API error'));
 
-      await expect(service.getSuggestions(50, UID)).rejects.toThrow(BadRequestException);
-      await expect(service.getSuggestions(50, UID)).rejects.toThrow('API error');
+      await expect(service.getSuggestions(5, UID)).rejects.toThrow(BadRequestException);
+      await expect(service.getSuggestions(5, UID)).rejects.toThrow('API error');
     });
   });
 });

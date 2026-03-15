@@ -25,13 +25,13 @@ export class MarketDataService {
       throw new Error(`CoinGecko request failed: ${res.status} ${res.statusText}`);
     }
 
-    const raw: Array<{
+    const raw = (await res.json()) as Array<{
       symbol: string;
       current_price: number;
       price_change_percentage_24h: number;
       total_volume: number;
       market_cap: number;
-    }> = await res.json();
+    }>;
 
     const data: CoinSnapshot[] = raw.map((coin) => ({
       symbol: coin.symbol.toUpperCase(),

@@ -1,11 +1,5 @@
+// Hit backend directly; Vite proxy returns 404 with TanStack Start + Nitro. Backend has CORS for localhost:3000.
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
-
-async function getToken(): Promise<string | null> {
-  if (typeof window === 'undefined') return null
-  // window.Clerk is injected by ClerkProvider
-  return (window as unknown as { Clerk?: { session?: { getToken: () => Promise<string> } } })
-    .Clerk?.session?.getToken() ?? null
-}
 
 export type RiskAppetite = 'LOW' | 'MEDIUM' | 'HIGH'
 export type TradeDirection = 'LONG' | 'SHORT'
@@ -24,6 +18,7 @@ export type Position = {
   pnl: number
   entryPrice: number | null
   currentPrice: number | null
+  instruction?: string
   createdAt: string
   activatedAt: string | null
   closedAt: string | null
@@ -53,11 +48,10 @@ export type SnapshotSummary = {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = await getToken()
   const res = await fetch(`${BASE}${path}`, {
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     ...options,
   })
@@ -84,6 +78,11 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify({ mode }),
       }),
+    updateInstruction: (id: string, instruction: string) =>
+      request<Position>(`/positions/${id}/instruction`, {
+        method: 'PATCH',
+        body: JSON.stringify({ instruction }),
+      }),
     stop: (id: string) =>
       request<Position>(`/positions/${id}/stop`, { method: 'POST' }),
     pause: (id: string) =>
@@ -107,6 +106,16 @@ export const api = {
   },
   user: {
     clearAllData: () => request<void>('/user/data', { method: 'DELETE' }),
+  },
+  binanceKeys: {
+    getStatus: () =>
+      request<{ hasKeys: boolean; apiKeyMasked?: string }>('/binance-keys'),
+    addOrUpdate: (apiKey: string, apiSecret: string) =>
+      request<{ hasKeys: true; apiKeyMasked: string }>('/binance-keys', {
+        method: 'PUT',
+        body: JSON.stringify({ apiKey, apiSecret }),
+      }),
+    remove: () => request<void>('/binance-keys', { method: 'DELETE' }),
   },
   agent: {
     status: () => request<SchedulerStatus>('/agent/status'),

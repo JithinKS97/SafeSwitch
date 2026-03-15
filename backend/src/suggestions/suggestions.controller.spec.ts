@@ -40,7 +40,7 @@ describe('SuggestionsController', () => {
       service.getSuggestions.mockResolvedValue(mockResponse);
       const res = await request(app.getHttpServer())
         .post('/suggestions')
-        .send({ riskPct: 20 });
+        .send({ riskPct: 5 });
       expect(res.status).toBe(200);
       expect(res.body.analysis).toBeTruthy();
       expect(res.body.suggestions[0].pair).toBe('BTC/USDT');
@@ -48,8 +48,8 @@ describe('SuggestionsController', () => {
 
     it('passes the riskPct number to the service', async () => {
       service.getSuggestions.mockResolvedValue(mockResponse);
-      await request(app.getHttpServer()).post('/suggestions').send({ riskPct: 75 });
-      expect(service.getSuggestions).toHaveBeenCalledWith(75, undefined);
+      await request(app.getHttpServer()).post('/suggestions').send({ riskPct: 7 });
+      expect(service.getSuggestions).toHaveBeenCalledWith(7, undefined);
     });
 
     it('returns 400 when riskPct is missing', async () => {
@@ -64,17 +64,17 @@ describe('SuggestionsController', () => {
       expect(res.status).toBe(400);
     });
 
-    it('returns 400 when riskPct is above 100', async () => {
+    it('returns 400 when riskPct is above 10', async () => {
       const res = await request(app.getHttpServer())
         .post('/suggestions')
-        .send({ riskPct: 101 });
+        .send({ riskPct: 11 });
       expect(res.status).toBe(400);
     });
 
     it('returns 400 when riskPct is not an integer', async () => {
       const res = await request(app.getHttpServer())
         .post('/suggestions')
-        .send({ riskPct: 50.5 });
+        .send({ riskPct: 5.5 });
       expect(res.status).toBe(400);
     });
   });

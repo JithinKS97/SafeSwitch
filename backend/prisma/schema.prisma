@@ -6,6 +6,65 @@ datasource db {
   provider = "postgresql"
 }
 
+// Better Auth tables
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}
+
 model Position {
   id           String         @id @default(uuid())
   userId       String
@@ -19,8 +78,10 @@ model Position {
   pnl          Float          @default(0)
   entryPrice   Float?
   currentPrice Float?
+  liveQuantity Float?   // Base asset quantity held (LIVE mode only)
   closeReason  CloseReason?
   agentOpened  Boolean        @default(false)
+  instruction  String         @default("")  // Per-pair instruction for the agent
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   activatedAt  DateTime?
@@ -77,6 +138,18 @@ model AgentInstruction {
   updatedAt DateTime @updatedAt
 
   @@map("agent_instruction")
+}
+
+model UserBinanceKey {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  apiKey           String   // Stored for signing; never returned to client
+  apiSecretEncrypted String // Encrypted at rest
+  apiKeyMasked     String   // Last 4 chars for display, e.g. "...xyz1"
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("user_binance_keys")
 }
 
 model SuggestionSnapshot {

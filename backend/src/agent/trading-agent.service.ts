@@ -41,7 +41,7 @@ export class TradingAgentService {
     private readonly instructionRepo: AgentInstructionRepository,
     @Inject(PAIR_KNOWLEDGE_ENGINE) private readonly pairKnowledge: PairKnowledgeEngine,
   ) {
-    this.schedulerEnabled = false;
+    this.schedulerEnabled = true;
   }
 
   setSchedulerEnabled(enabled: boolean): void {
@@ -240,13 +240,15 @@ export class TradingAgentService {
       currentPrice: number | null;
       closedAt: Date | null;
     }>,
-    watchingPositions: Array<{ id: string; pair: string; direction: string; riskAppetite: string }>,
+    watchingPositions: Array<{ id: string; pair: string; direction: string; riskAppetite: string; instruction?: string; mode?: string }>,
     openPositions: Array<{
       id: string;
       pair: string;
       direction: string;
       entryPrice: number | null;
       activatedAt: Date | null;
+      instruction?: string;
+      mode?: string;
     }>,
     pairJournals: Array<{ pair: string; confidence: number; summarisedKnowledge: string; entries: Array<{ cycleNum: number; action: string; reasoning: string; outcome: { pnl: number; closeReason: string } | null; createdAt: Date }> }>,
     priceMap: Record<string, number>,
@@ -275,7 +277,10 @@ export class TradingAgentService {
         : watchingPositions
             .map((p) => {
               const current = priceMap[p.pair];
-              return `id:${p.id} | ${p.pair} ${p.direction} | risk: ${p.riskAppetite} | current price: ${current ?? '?'}`;
+              const instr = p.instruction?.trim();
+              const instrLine = instr ? ` | instruction: ${instr}` : '';
+              const modeLine = p.mode === 'LIVE' ? ' | mode: LIVE (user chose real trading)' : '';
+              return `id:${p.id} | ${p.pair} ${p.direction} | risk: ${p.riskAppetite} | current price: ${current ?? '?'}${modeLine}${instrLine}`;
             })
             .join('\n');
 
@@ -295,7 +300,10 @@ export class TradingAgentService {
               const hoursOpen = p.activatedAt
                 ? Math.round((Date.now() - p.activatedAt.getTime()) / 3_600_000)
                 : 0;
-              return `id:${p.id} | ${p.pair} ${p.direction} | entry: ${entry} | current: ${current ?? '?'} | pnl: ${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}% | open ${hoursOpen}h`;
+              const instr = p.instruction?.trim();
+              const instrLine = instr ? ` | instruction: ${instr}` : '';
+              const modeLine = p.mode === 'LIVE' ? ' | mode: LIVE (user chose real trading)' : '';
+              return `id:${p.id} | ${p.pair} ${p.direction} | entry: ${entry} | current: ${current ?? '?'} | pnl: ${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}% | open ${hoursOpen}h${modeLine}${instrLine}`;
             })
             .join('\n');
 
@@ -352,9 +360,11 @@ ${candleSection}
 --- INSTRUCTIONS ---
 1. For WATCHING pairs: decide if now is a good entry point based on candle momentum and trend. Enter only if conditions are clearly favourable.
 2. For OPEN positions: decide whether to hold or close. Close with PROFIT_TARGET if in meaningful profit and momentum is fading; close with DRAWDOWN_LIMIT if losing and trend is against it.
-3. Do NOT invent new pairs — only act on the IDs listed above.
-4. For EACH enter or close decision, provide a short "reasoning" (1-2 sentences) explaining why. This will be stored in the pair journal for the user to review.
-5. Write a concise journal entry (3-5 sentences) about what you observed and decided.
+3. When a pair shows "mode: LIVE (user chose real trading)", the user has manually overridden to use real funds. Your enter/exit decisions will execute with real money — treat these with appropriate care.
+4. When a pair has an "instruction", factor it into your decision (e.g. "prefer longer holds", "exit quickly on any profit", "be conservative").
+5. Do NOT invent new pairs — only act on the IDs listed above.
+6. For EACH enter or close decision, provide a short "reasoning" (1-2 sentences) explaining why. This will be stored in the pair journal for the user to review.
+7. Write a concise journal entry (3-5 sentences) about what you observed and decided.
 
 Respond ONLY with valid JSON — no markdown fences, no extra text:
 {

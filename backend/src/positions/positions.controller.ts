@@ -40,6 +40,15 @@ export class PositionsController {
     return this.service.activate(id, userId);
   }
 
+  @Patch(':id/instruction')
+  updateInstruction(
+    @Param('id') id: string,
+    @Body('instruction') instruction: string,
+    @UserId() userId: string,
+  ) {
+    return this.service.updateInstruction(id, instruction ?? '', userId);
+  }
+
   @Patch(':id/mode')
   switchMode(
     @Param('id') id: string,

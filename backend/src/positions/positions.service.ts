@@ -72,8 +72,8 @@ export class PositionsService {
 
   async switchMode(id: string, mode: TradingMode, userId: string) {
     const position = await this.findById(id, userId);
-    if (position.status !== PositionStatus.ACTIVE) {
-      throw new BadRequestException('Position must be active to switch mode');
+    if (position.status !== PositionStatus.INACTIVE && position.status !== PositionStatus.ACTIVE) {
+      throw new BadRequestException('Can only switch mode for watching or open positions');
     }
     if (position.mode === mode) {
       throw new BadRequestException(`Position is already in ${mode} mode`);
@@ -110,6 +110,11 @@ export class PositionsService {
   /** @deprecated use resume() */
   async reopen(id: string, userId: string) {
     return this.resume(id, userId);
+  }
+
+  async updateInstruction(id: string, instruction: string, userId: string) {
+    const position = await this.findById(id, userId);
+    return this.repo.updateInstruction(id, instruction.trim());
   }
 
   async delete(id: string, userId: string) {

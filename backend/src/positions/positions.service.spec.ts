@@ -129,8 +129,14 @@ describe('PositionsService', () => {
       await expect(service.switchMode('pos-1', 'LIVE', UID)).resolves.toMatchObject({ mode: 'LIVE' });
     });
 
-    it('throws BadRequestException when position is not ACTIVE', async () => {
+    it('allows switch when INACTIVE (Watching)', async () => {
       repo.findById.mockResolvedValue({ ...basePosition, status: 'INACTIVE', mode: 'PAPER' });
+      repo.switchMode.mockResolvedValue({ ...basePosition, status: 'INACTIVE', mode: 'LIVE' });
+      await expect(service.switchMode('pos-1', 'LIVE', UID)).resolves.toMatchObject({ mode: 'LIVE' });
+    });
+
+    it('throws BadRequestException when position is STOPPED', async () => {
+      repo.findById.mockResolvedValue({ ...basePosition, status: 'STOPPED', mode: 'PAPER' });
       await expect(service.switchMode('pos-1', 'LIVE', UID)).rejects.toThrow(BadRequestException);
     });
 

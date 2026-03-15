@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../shared/api'
 import { ConfidenceBar } from './ConfidenceBar'
+import { EditDisplaySaveModal } from '@/components/ui/edit-display-save-modal'
 import type { Position, PairJournal } from '../../shared/api'
 
 // Human-readable status labels and styles
@@ -32,7 +33,7 @@ function Btn({
   variant?: 'ghost' | 'danger'
 }) {
   const base =
-    'inline-flex items-center rounded px-2.5 py-1 text-xs font-medium transition disabled:opacity-40 cursor-pointer'
+    'inline-flex shrink-0 items-center whitespace-nowrap rounded px-2.5 py-1 text-xs font-medium transition disabled:opacity-40 cursor-pointer'
   const styles = {
     ghost:
       'border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800',
@@ -92,7 +93,7 @@ function PairJournalModal({
 
           <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
             <p className="mb-1 text-xs font-medium uppercase tracking-widest text-amber-600 dark:text-amber-400">
-              What the agent thinks it knows
+              Key takeaways
             </p>
             <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
               {pairJournal.summarisedKnowledge ||
@@ -149,12 +150,25 @@ export function PositionRow({
 }) {
   const qc = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
+  const [instructionModalOpen, setInstructionModalOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
   const invalidate = () => qc.invalidateQueries({ queryKey: ['positions'] })
 
   const pause = useMutation({ mutationFn: () => api.positions.pause(position.id), onSuccess: invalidate })
   const resume = useMutation({ mutationFn: () => api.positions.resume(position.id), onSuccess: invalidate })
+  const switchMode = useMutation({
+    mutationFn: (mode: 'PAPER' | 'LIVE') => api.positions.switchMode(position.id, mode),
+    onSuccess: invalidate,
+  })
+  const updateInstruction = useMutation({
+    mutationFn: (instruction: string) => api.positions.updateInstruction(position.id, instruction),
+    onSuccess: (data) => {
+      qc.setQueryData<Position[]>(['positions'], (old) =>
+        old?.map((p) => (p.id === position.id ? { ...p, instruction: data.instruction } : p)) ?? []
+      )
+    },
+  })
   const remove = useMutation({
     mutationFn: () => api.positions.delete(position.id),
     onMutate: async () => {
@@ -173,6 +187,15 @@ export function PositionRow({
   const isOpen = position.status === 'ACTIVE'
   const isPaused = position.status === 'STOPPED'
   const isClosed = position.status === 'COMPLETED'
+  const exitOutcomes = pairJournal?.entries.filter((e) => e.action === 'EXIT' && e.outcome) ?? []
+  const totalRealizedPnl = exitOutcomes.reduce((sum, e) => sum + (e.outcome!.pnl ?? 0), 0)
+  const hasCompletedTrade = exitOutcomes.length > 0
+  const showPnl =
+    isOpen ||
+    isClosed ||
+    (isPaused && (position.entryPrice != null || hasCompletedTrade)) ||
+    (isWatching && hasCompletedTrade)
+  const displayPnl = isOpen ? totalRealizedPnl + position.pnl : totalRealizedPnl || position.pnl || 0
   const { text: statusText, style: statusStyle } = STATUS_LABEL[position.status] ?? {
     text: position.status,
     style: '',
@@ -186,7 +209,7 @@ export function PositionRow({
         <td className="w-8 py-3 pl-4" />
         <td className="py-3 pr-3">
           <div className="flex items-center gap-2">
-            <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[position.status]}`} />
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[position.status]}`} />
             {hasJournal ? (
               <button
                 onClick={() => setModalOpen(true)}
@@ -197,47 +220,103 @@ export function PositionRow({
             ) : (
               <span className="font-medium text-zinc-900 dark:text-zinc-100">{position.pair}</span>
             )}
+            {pairJournal != null && (
+              <span
+                className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] tabular-nums ${
+                  pairJournal.confidence >= 70
+                    ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400'
+                    : pairJournal.confidence >= 40
+                      ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400'
+                      : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
+                }`}
+                title="Agent confidence"
+              >
+                {pairJournal.confidence.toFixed(0)}%
+              </span>
+            )}
           </div>
         </td>
-        <td className="px-3 py-3">
+        <td className="whitespace-nowrap px-3 py-3">
           <span
             className={`text-xs font-medium ${position.direction === 'LONG' ? 'text-emerald-600' : 'text-red-500'}`}
           >
             {position.direction}
           </span>
         </td>
-        <td className="px-3 py-3">
-          <span className={`text-xs font-medium ${statusStyle}`}>{statusText}</span>
+        <td className="whitespace-nowrap px-3 py-3">
+          <div className="flex items-center gap-1.5">
+            <span className={`text-xs font-medium ${statusStyle}`}>{statusText}</span>
+            <span
+              className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                position.mode === 'LIVE'
+                  ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400'
+                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
+              }`}
+            >
+              {position.mode === 'LIVE' ? 'Live' : 'Paper'}
+            </span>
+          </div>
         </td>
-        <td className="px-3 py-3 text-right font-mono text-xs tabular-nums text-zinc-600 dark:text-zinc-400">
-          {(position.amount ?? 0) > 0 ? `$${position.amount.toFixed(0)}` : '—'}
-        </td>
-        <td className="px-3 py-3 text-right font-mono text-xs tabular-nums">
-          {isOpen || isClosed ? (
-            <span className={position.pnl >= 0 ? 'text-emerald-600' : 'text-red-500'}>
-              {position.pnl >= 0 ? '+' : ''}
-              {position.pnl.toFixed(2)}%
-              {(position.amount ?? 0) > 0 && (
-                <span className="ml-1 text-zinc-500 dark:text-zinc-400">
-                  ({position.pnl >= 0 ? '+' : ''}${((position.amount * position.pnl) / 100).toFixed(2)})
+        <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-xs tabular-nums text-zinc-600 dark:text-zinc-400">
+          {(position.amount ?? 0) > 0 ? (
+            <>
+              ${position.amount.toFixed(0)}
+              {showPnl && (
+                <span className={`ml-1.5 ${displayPnl >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {(position.amount * displayPnl) / 100 >= 0 ? '+' : '-'}$
+                  {Math.abs((position.amount * displayPnl) / 100).toFixed(2)}
                 </span>
               )}
+            </>
+          ) : (
+            '—'
+          )}
+        </td>
+        <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-xs tabular-nums">
+          {showPnl ? (
+            <span className={displayPnl >= 0 ? 'text-emerald-600' : 'text-red-500'}>
+              {displayPnl >= 0 ? '+' : ''}
+              {displayPnl.toFixed(2)}%
             </span>
           ) : (
             <span className="text-zinc-300 dark:text-zinc-600">—</span>
           )}
         </td>
-        <td className="py-3 pl-3 pr-4">
-          <div className="flex items-center justify-end gap-1.5">
+        <td className="whitespace-nowrap py-3 pl-3 pr-4">
+          <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5">
             {hasJournal && (
               <Btn onClick={() => setModalOpen(true)} variant="ghost">
                 Journal
               </Btn>
             )}
             {(isWatching || isOpen) && (
-              <Btn onClick={() => pause.mutate()} disabled={pause.isPending}>
-                {pause.isPending ? '…' : 'Pause'}
+              <Btn onClick={() => setInstructionModalOpen(true)} variant="ghost">
+                {(position.instruction ?? '').trim() ? 'Edit instruction' : 'Instruction'}
               </Btn>
+            )}
+            {(isWatching || isOpen) && (
+              <>
+                {position.mode === 'PAPER' ? (
+                  <Btn
+                    onClick={() => window.confirm(`Switch ${position.pair} to LIVE trading? Real funds will be used.`) && switchMode.mutate('LIVE')}
+                    disabled={switchMode.isPending}
+                    variant="ghost"
+                  >
+                    {switchMode.isPending ? '…' : 'Go live'}
+                  </Btn>
+                ) : (
+                  <Btn
+                    onClick={() => switchMode.mutate('PAPER')}
+                    disabled={switchMode.isPending}
+                    variant="ghost"
+                  >
+                    {switchMode.isPending ? '…' : 'Paper'}
+                  </Btn>
+                )}
+                <Btn onClick={() => pause.mutate()} disabled={pause.isPending}>
+                  {pause.isPending ? '…' : 'Pause'}
+                </Btn>
+              </>
             )}
             {(isPaused || isClosed) && (
               <Btn onClick={() => resume.mutate()} disabled={resume.isPending}>
@@ -264,6 +343,25 @@ export function PositionRow({
             onClose={() => setModalOpen(false)}
           />,
           document.body,
+        )}
+      {mounted &&
+        instructionModalOpen && (
+          <EditDisplaySaveModal
+            title={`Instruction for ${position.pair}`}
+            description="Tell the agent how to trade this pair (e.g. “prefer longer holds”, “exit quickly on any profit”)."
+            value={position.instruction ?? ''}
+            placeholder="e.g. Be conservative, only enter on strong momentum"
+            onSave={async (v) => {
+              try {
+                await updateInstruction.mutateAsync(v)
+                setInstructionModalOpen(false)
+              } catch {
+                // stay open on error
+              }
+            }}
+            onClose={() => setInstructionModalOpen(false)}
+            isPending={updateInstruction.isPending}
+          />
         )}
     </>
   )

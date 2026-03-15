@@ -19,7 +19,7 @@ export function SuggestPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [mounted, setMounted] = useState(false)
-  const [triggerPct, setTriggerPct] = useState(50)
+  const [triggerRisk, setTriggerRisk] = useState(5)
   const [result, setResult] = useState<SuggestionsResponse | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [added, setAdded] = useState<Set<string>>(new Set())
@@ -58,9 +58,9 @@ export function SuggestPage() {
   }, [history])
 
   const selectedHistory = history.find((h) => h.id === selectedId)
-  const triggerLabel = getRiskLabel(triggerPct)
-  const displayRiskPct = result?.riskPct ?? selectedHistory?.riskPct ?? triggerPct
-  const selectedLabel = result ? getRiskLabel(displayRiskPct) : null
+  const triggerLabel = getRiskLabel(triggerRisk)
+  const displayRisk = result?.riskPct ?? selectedHistory?.riskPct ?? triggerRisk
+  const selectedLabel = result ? getRiskLabel(displayRisk) : null
 
   const getSuggestions = useMutation({
     mutationFn: (p: number) => api.suggestions.generate(p),
@@ -121,7 +121,7 @@ export function SuggestPage() {
   }
 
   return (
-    <main className="page-wrap px-4 pt-10 pb-16">
+    <main className="page-wrap px-2 pt-10 pb-16 sm:px-4">
       <h1 className="mb-8 text-lg font-semibold text-zinc-900 dark:text-zinc-100">Suggest pairs</h1>
 
       <div className="flex gap-8 items-start">
@@ -131,14 +131,14 @@ export function SuggestPage() {
           <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 p-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">New analysis</p>
             <p className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Risk: <span style={{ color: triggerLabel.color }}>{triggerPct}% {triggerLabel.label}</span>
+              Risk: <span style={{ color: triggerLabel.color }}>{triggerRisk}/10 {triggerLabel.label}</span>
             </p>
             {mounted && (
               <Slider
-                value={[triggerPct]}
-                max={100}
+                value={[triggerRisk]}
+                max={10}
                 step={1}
-                onValueChange={([v]) => setTriggerPct(v)}
+                onValueChange={([v]) => setTriggerRisk(v)}
                 className="mb-2"
               />
             )}
@@ -147,7 +147,7 @@ export function SuggestPage() {
               <span>Aggressive</span>
             </div>
             <button
-              onClick={() => getSuggestions.mutate(triggerPct)}
+              onClick={() => getSuggestions.mutate(triggerRisk)}
               disabled={getSuggestions.isPending}
               className="w-full rounded bg-zinc-900 dark:bg-zinc-100 px-3 py-2 text-xs font-medium text-white dark:text-zinc-900 transition hover:bg-zinc-700 dark:hover:bg-zinc-300 disabled:opacity-40"
             >
@@ -174,12 +174,12 @@ export function SuggestPage() {
                         onClick={() => selectSnapshot(h.id)}
                         className={`w-full rounded px-3 py-2.5 text-left transition ${
                           isSelected
-                            ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                            ? 'bg-zinc-700 text-zinc-100 dark:bg-zinc-700 dark:text-zinc-200'
                             : 'bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2 pr-4">
-                          <span className="text-sm font-semibold tabular-nums">{h.riskPct}%</span>
+                          <span className="text-sm font-semibold tabular-nums">{h.riskPct}/10</span>
                           <span className="text-xs font-medium" style={{ color: isSelected ? 'inherit' : rc }}>{rl}</span>
                         </div>
                         <div className="mt-0.5 text-xs opacity-50">{formatDate(h.createdAt)}</div>
@@ -220,7 +220,7 @@ export function SuggestPage() {
                 {getSuggestions.error?.message ?? 'Something went wrong'}
               </p>
               <button
-                onClick={() => getSuggestions.mutate(triggerPct)}
+                onClick={() => getSuggestions.mutate(triggerRisk)}
                 className="mt-3 text-xs font-medium text-red-600 dark:text-red-400 hover:underline"
               >
                 Try again
@@ -241,7 +241,7 @@ export function SuggestPage() {
               <div className="flex items-center gap-2 pb-2 border-b border-zinc-200 dark:border-zinc-800">
                 <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500">Viewing</p>
                 <span className="text-sm font-medium" style={{ color: selectedLabel?.color }}>
-                  {displayRiskPct}% {selectedLabel?.label}
+                  {displayRisk}/10 {selectedLabel?.label}
                 </span>
                 {selectedHistory && (
                   <span className="text-xs text-zinc-400">· {formatDate(selectedHistory.createdAt)}</span>

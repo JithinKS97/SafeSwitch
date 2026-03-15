@@ -33,7 +33,7 @@ ${entriesText}
 Current confidence score: ${confidence.toFixed(0)}%
 Number of completed trades (EXITs): ${exitCount}
 
-Write 1-3 concise sentences that capture what the agent thinks it has learned about this pair. Include:
+Write 2-4 concise sentences that capture what the agent thinks it has learned about this pair. Include:
 - Its understanding and any patterns it believes work (if any)
 - How confident it feels (or that it feels less confident if score is low)
 - Whether it thinks more trades are needed to form a clearer view (especially when confidence is low or few trades completed)
@@ -41,7 +41,7 @@ Write 1-3 concise sentences that capture what the agent thinks it has learned ab
 Write in third person ("The agent has learned...", "The agent feels..."). Be specific and factual. No fluff.`;
 
       const raw = await this.ai.complete(prompt);
-      return raw.trim().slice(0, 500); // cap length
+      return raw.trim().slice(0, 1000); // cap length
     } catch (err) {
       this.logger.warn(`Knowledge summarization failed: ${(err as Error).message}`);
       return '';

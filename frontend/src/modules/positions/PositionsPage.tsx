@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '../shared/api'
 import { PositionRow } from './components/PositionRow'
+import { BinanceKeysModal } from './components/BinanceKeysModal'
+import { EditDisplaySaveModal } from '@/components/ui/edit-display-save-modal'
 import type { PairJournal, SchedulerStatus } from '../shared/api'
 
 function formatTimeUntil(iso: string): string {
@@ -40,19 +42,37 @@ export function PositionsPage() {
     queryFn: api.agent.instruction,
   })
 
+  const { data: binanceKeysStatus } = useQuery({
+    queryKey: ['binanceKeys'],
+    queryFn: api.binanceKeys.getStatus,
+  })
+
   const [instructionModalOpen, setInstructionModalOpen] = useState(false)
-  const [instructionInput, setInstructionInput] = useState('')
-  useEffect(() => {
-    setInstructionInput(instructionData?.instruction ?? '')
-  }, [instructionData?.instruction])
-  useEffect(() => {
-    if (instructionModalOpen) {
-      setInstructionInput(instructionData?.instruction ?? '')
-    }
-  }, [instructionModalOpen, instructionData?.instruction])
+  const [binanceKeysModalOpen, setBinanceKeysModalOpen] = useState(false)
 
   const setInstruction = useMutation({
     mutationFn: (instruction: string) => api.agent.setInstruction(instruction),
+  })
+
+  const addBinanceKeys = useMutation({
+    mutationFn: ({ apiKey, apiSecret }: { apiKey: string; apiSecret: string }) =>
+      api.binanceKeys.addOrUpdate(apiKey, apiSecret),
+    onSuccess: (data) => {
+      qc.setQueryData(['binanceKeys'], data)
+      setBinanceKeysModalOpen(false)
+      toast.success('Binance API keys saved')
+    },
+    onError: (e) => toast.error(e.message),
+  })
+
+  const removeBinanceKeys = useMutation({
+    mutationFn: () => api.binanceKeys.remove(),
+    onSuccess: () => {
+      qc.setQueryData(['binanceKeys'], { hasKeys: false })
+      setBinanceKeysModalOpen(false)
+      toast.success('Binance API keys removed')
+    },
+    onError: (e) => toast.error(e.message),
   })
 
   const setScheduler = useMutation({
@@ -79,7 +99,7 @@ export function PositionsPage() {
   )
 
   return (
-    <main className="page-wrap px-4 pb-16 pt-10">
+    <main className="page-wrap px-2 pb-16 pt-10 sm:px-4">
       <div className="mb-8 flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Positions</h1>
@@ -135,71 +155,59 @@ export function PositionsPage() {
           )}
         </div>
 
-        <button
-          onClick={() => {
-            setInstructionInput(instructionData?.instruction ?? '')
-            setInstructionModalOpen(true)
-          }}
-          className="self-start text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 underline underline-offset-2"
-        >
-          {instructionData?.instruction
-            ? `Goal: ${instructionData.instruction.slice(0, 50)}${instructionData.instruction.length > 50 ? '…' : ''}`
-            : 'Set your goal / instruction'}
-        </button>
+        <div className="flex flex-wrap gap-4">
+          <button
+            onClick={() => setInstructionModalOpen(true)}
+            className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 underline underline-offset-2"
+          >
+            {instructionData?.instruction
+              ? `Goal: ${instructionData.instruction.slice(0, 50)}${instructionData.instruction.length > 50 ? '…' : ''}`
+              : 'Set your goal / instruction'}
+          </button>
+          <button
+            onClick={() => setBinanceKeysModalOpen(true)}
+            className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 underline underline-offset-2"
+          >
+            {binanceKeysStatus?.hasKeys
+              ? `Binance API: ${binanceKeysStatus.apiKeyMasked ?? 'configured'}`
+              : 'Add Binance API keys'}
+          </button>
+        </div>
       </div>
 
-      {/* Instruction modal */}
+      {/* Binance API keys modal */}
+      {binanceKeysModalOpen && (
+        <BinanceKeysModal
+          hasKeys={binanceKeysStatus?.hasKeys ?? false}
+          apiKeyMasked={binanceKeysStatus?.apiKeyMasked}
+          onAdd={(apiKey, apiSecret) => addBinanceKeys.mutate({ apiKey, apiSecret })}
+          onRemove={() => removeBinanceKeys.mutate()}
+          onClose={() => setBinanceKeysModalOpen(false)}
+          isAdding={addBinanceKeys.isPending}
+          isRemoving={removeBinanceKeys.isPending}
+        />
+      )}
+
+      {/* Goal / instruction modal */}
       {instructionModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => !setInstruction.isPending && setInstructionModalOpen(false)}
-        >
-          <div
-            className="w-full max-w-md rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
-              Your goal / instruction
-            </h3>
-            <p className="text-xs text-zinc-500 mb-3">
-              Tell the agent your goal for the day. It will factor this into its decisions.
-            </p>
-            <textarea
-              placeholder="e.g. Today my goal is to make just $5 profit"
-              value={instructionInput}
-              onChange={(e) => setInstructionInput(e.target.value)}
-              rows={4}
-              className="w-full rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm placeholder:text-zinc-400 resize-none"
-              autoFocus
-            />
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={() => setInstructionModalOpen(false)}
-                disabled={setInstruction.isPending}
-                className="rounded px-3 py-1.5 text-xs font-medium border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  try {
-                    const data = await setInstruction.mutateAsync(instructionInput.trim())
-                    qc.setQueryData(['agent', 'instruction'], data)
-                    setInstructionInput(data.instruction)
-                    setInstructionModalOpen(false)
-                    toast.success('Goal saved')
-                  } catch {
-                    toast.error('Failed to save goal')
-                  }
-                }}
-                disabled={setInstruction.isPending}
-                className="rounded px-3 py-1.5 text-xs font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-zinc-300 disabled:opacity-50"
-              >
-                {setInstruction.isPending ? 'Saving…' : 'Save'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <EditDisplaySaveModal
+          title="Your goal / instruction"
+          description="Tell the agent your goal for the day. It will factor this into its decisions."
+          value={instructionData?.instruction ?? ''}
+          placeholder="e.g. Today my goal is to make just $5 profit"
+          onSave={async (v) => {
+            try {
+              const data = await setInstruction.mutateAsync(v)
+              qc.setQueryData(['agent', 'instruction'], data)
+              setInstructionModalOpen(false)
+              toast.success('Goal saved')
+            } catch {
+              toast.error('Failed to save goal')
+            }
+          }}
+          onClose={() => setInstructionModalOpen(false)}
+          isPending={setInstruction.isPending}
+        />
       )}
 
       {isLoading && (
@@ -263,15 +271,15 @@ export function PositionsPage() {
       )}
 
       {positions.length > 0 && (
-        <div className="overflow-hidden rounded border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded border border-zinc-200 dark:border-zinc-800">
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
                 <th className="w-8 py-2.5" />
                 {['Pair', 'Direction', 'Status', 'Amount', 'PnL', ''].map((h) => (
                   <th
                     key={h}
-                    className={`py-2.5 text-xs font-medium text-zinc-400 ${['', 'PnL', 'Amount'].includes(h) ? 'pr-4 text-right' : 'pl-4 text-left'}`}
+                    className={`whitespace-nowrap py-2.5 text-xs font-medium text-zinc-400 ${h === '' ? 'min-w-[280px]' : ''} ${['', 'PnL', 'Amount'].includes(h) ? 'pr-4 text-right' : 'pl-4 text-left'}`}
                   >
                     {h}
                   </th>
