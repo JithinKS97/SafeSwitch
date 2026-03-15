@@ -65,8 +65,11 @@ coverage/
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# ---- Rust (backend/) ----
-backend/target/
+# ---- pnpm ----
+.pnpm-store/
+
+# ---- Prisma ----
+backend/src/generated/
 
 # ---- Misc ----
 .temp
