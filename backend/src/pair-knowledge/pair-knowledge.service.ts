@@ -1,10 +1,11 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import {
-  PAIR_KNOWLEDGE_ENGINE,
   type JournalEntry,
   type PairKnowledgeEngine,
   type PairJournalData,
+  type EntryMathSnapshot,
+  type PairWorksheet,
 } from './pair-knowledge.interface';
 import { CONFIDENCE_CALCULATOR, type ConfidenceCalculator } from './confidence-calculator.interface';
 import { KNOWLEDGE_SUMMARIZER, type KnowledgeSummarizer } from './knowledge-summarizer.interface';
@@ -24,6 +25,7 @@ export class PairKnowledgeEngineService implements PairKnowledgeEngine {
     action: 'ENTER' | 'EXIT',
     reasoning: string,
     outcome?: { pnl: number; closeReason: string },
+    mathAnalysis?: EntryMathSnapshot,
   ): Promise<void> {
     const journal = await this.prisma.pairJournal.upsert({
       where: { userId_pair: { userId, pair } },
@@ -37,6 +39,7 @@ export class PairKnowledgeEngineService implements PairKnowledgeEngine {
         action,
         reasoning,
         outcome: outcome ?? undefined,
+        mathAnalysis: mathAnalysis ?? undefined,
       },
     });
     if (action === 'EXIT' && outcome) {
@@ -51,6 +54,7 @@ export class PairKnowledgeEngineService implements PairKnowledgeEngine {
     cycleNum: number,
     price: number,
     reasoning?: string,
+    mathAnalysis?: EntryMathSnapshot,
   ): Promise<void> {
     const journal = await this.prisma.pairJournal.upsert({
       where: { userId_pair: { userId, pair } },
@@ -64,9 +68,18 @@ export class PairKnowledgeEngineService implements PairKnowledgeEngine {
         action: 'OBSERVE',
         reasoning: reasoning ?? `Price: ${price}`,
         outcome: { price },
+        mathAnalysis: mathAnalysis ?? undefined,
       },
     });
     await this.updateSummarisedKnowledge(journal.id, pair);
+  }
+
+  async updateWorksheet(userId: string, pair: string, worksheet: PairWorksheet): Promise<void> {
+    await this.prisma.pairJournal.upsert({
+      where: { userId_pair: { userId, pair } },
+      create: { userId, pair, worksheet: worksheet as object },
+      update: { worksheet: worksheet as object },
+    });
   }
 
   private async updateConfidence(pairJournalId: string): Promise<void> {
@@ -139,6 +152,7 @@ export class PairKnowledgeEngineService implements PairKnowledgeEngine {
     pair: string
     confidence: number
     summarisedKnowledge: string
+    worksheet?: unknown
     updatedAt: Date
     entries: Array<{
       id: string
@@ -146,6 +160,7 @@ export class PairKnowledgeEngineService implements PairKnowledgeEngine {
       action: string
       reasoning: string
       outcome: unknown
+      mathAnalysis?: unknown
       createdAt: Date
     }>
   }): PairJournalData {
@@ -154,6 +169,7 @@ export class PairKnowledgeEngineService implements PairKnowledgeEngine {
       pair: row.pair,
       confidence: row.confidence,
       summarisedKnowledge: row.summarisedKnowledge ?? '',
+      worksheet: (row.worksheet as PairWorksheet | null) ?? null,
       updatedAt: row.updatedAt,
       entries: row.entries.map((e) => {
         const o = e.outcome as { pnl?: number; closeReason?: string; price?: number } | null;
@@ -169,6 +185,7 @@ export class PairKnowledgeEngineService implements PairKnowledgeEngine {
           action: e.action as 'ENTER' | 'EXIT' | 'OBSERVE',
           reasoning: e.reasoning,
           outcome,
+          mathAnalysis: (e.mathAnalysis as EntryMathSnapshot | null) ?? null,
           createdAt: e.createdAt,
         };
       }),

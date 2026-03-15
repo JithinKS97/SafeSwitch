@@ -7,6 +7,8 @@ import { ExecutionService } from '../execution/execution.service';
 import { AgentJournalRepository, type JournalDecisions } from './agent-journal.repository';
 import { AgentInstructionRepository } from './agent-instruction.repository';
 import { PAIR_KNOWLEDGE_ENGINE, type PairKnowledgeEngine } from '../pair-knowledge/pair-knowledge.interface';
+import { IndicatorsService } from '../indicators/indicators.service';
+import type { PairWorksheet } from '../indicators/indicators.types';
 import { CloseReason } from '../common/types/enums';
 
 type AgentDecision = {
@@ -40,6 +42,7 @@ export class TradingAgentService {
     private readonly execution: ExecutionService,
     private readonly journalRepo: AgentJournalRepository,
     private readonly instructionRepo: AgentInstructionRepository,
+    private readonly indicators: IndicatorsService,
     @Inject(PAIR_KNOWLEDGE_ENGINE) private readonly pairKnowledge: PairKnowledgeEngine,
   ) {
     this.schedulerEnabled = true;
@@ -49,7 +52,6 @@ export class TradingAgentService {
     this.schedulerEnabled = enabled;
   }
 
-  // Scheduled: every N minutes (AGENT_CRON_INTERVAL_MINUTES, default 15)
   @Cron(
     (() => {
       const mins = parseInt(process.env.AGENT_CRON_INTERVAL_MINUTES ?? '15', 10);
@@ -101,7 +103,6 @@ export class TradingAgentService {
     };
   }
 
-  // Manual trigger: run for a specific user
   async runCycleForUser(userId: string): Promise<CycleResult> {
     const cycleNum = await this.journalRepo.nextCycleNum(userId);
     this.logger.log(`Running agent cycle #${cycleNum} for user ${userId}`);
@@ -109,7 +110,7 @@ export class TradingAgentService {
     // 1. Load last 5 journal entries
     const recentJournal = await this.journalRepo.findRecent(userId, 5);
 
-    // 2. Load user instruction (goal for the day, etc.)
+    // 2. Load user instruction
     const userInstruction = await this.instructionRepo.get(userId);
 
     // 3. Load last 10 closed positions with outcomes
@@ -143,7 +144,24 @@ export class TradingAgentService {
       }),
     );
 
-    // 6. Build prompt
+    // 6. Compute mathematical worksheets from candles
+    const worksheetMap = new Map<string, PairWorksheet>();
+    for (const pair of allPairs) {
+      const candles = candlesMap[pair];
+      if (candles?.length) {
+        worksheetMap.set(pair, this.indicators.compute(cycleNum, candles));
+      }
+    }
+
+    // 7. Persist worksheets so they're available outside of agent cycles
+    await Promise.all(
+      allPairs.map((pair) => {
+        const ws = worksheetMap.get(pair);
+        return ws ? this.pairKnowledge.updateWorksheet(userId, pair, ws) : Promise.resolve();
+      }),
+    );
+
+    // 8. Build prompt using worksheets (not raw candles)
     const prompt = this.buildPrompt(
       cycleNum,
       userInstruction,
@@ -152,19 +170,18 @@ export class TradingAgentService {
       watchingPositions,
       openPositions,
       pairJournals,
+      worksheetMap,
       priceMap,
-      candlesMap,
     );
 
-    // 7. Call AI
+    // 9. Call AI
     const raw = await this.ai.complete(prompt);
     const { decisions, journal } = this.parseResponse(raw, allPairs);
 
-    // 8. Execute decisions
+    // 10. Execute decisions
     const opened: string[] = [];
     const closed: string[] = [];
 
-    // Enter: agent decides to open a Watching position (paper or live based on position mode)
     for (const enterDecision of decisions.enter) {
       const pos = watchingPositions.find((p) => p.id === enterDecision.id);
       if (!pos) continue;
@@ -178,10 +195,11 @@ export class TradingAgentService {
         cycleNum,
         'ENTER',
         enterDecision.reasoning ?? 'Entered position.',
+        undefined,
+        worksheetMap.get(pos.pair) ? this.indicators.snapshot(worksheetMap.get(pos.pair)!) : undefined,
       );
     }
 
-    // Close: agent decides to exit an Open position (paper or live based on position mode)
     for (const closeDecision of decisions.close) {
       const pos = openPositions.find((p) => p.id === closeDecision.id);
       if (!pos) continue;
@@ -208,9 +226,9 @@ export class TradingAgentService {
         'EXIT',
         closeDecision.reasoning ?? 'Exited position.',
         { pnl: pnlPct, closeReason: reason },
+        worksheetMap.get(pos.pair) ? this.indicators.snapshot(worksheetMap.get(pos.pair)!) : undefined,
       );
 
-      // Auto re-watch: put pair back into watching so agent can re-enter without manual trigger
       const newAmount = Math.max(0, (pos.amount ?? 0) * (1 + pnlPct / 100));
       if (reason === CloseReason.PROFIT_TARGET) {
         await this.positions.createWatchingFromClosed({
@@ -227,32 +245,29 @@ export class TradingAgentService {
       }
     }
 
-    // 9. Add OBSERVE entry for each pair that had no ENTER/EXIT this cycle (price + agent thoughts)
+    // 11. OBSERVE entries for pairs with no action this cycle
     const pairsWithAction = new Set([
-      ...decisions.enter.map((e) => {
-        const pos = watchingPositions.find((p) => p.id === e.id);
-        return pos?.pair;
-      }).filter(Boolean),
-      ...decisions.close.map((c) => {
-        const pos = openPositions.find((p) => p.id === c.id);
-        return pos?.pair;
-      }).filter(Boolean),
+      ...decisions.enter.map((e) => watchingPositions.find((p) => p.id === e.id)?.pair).filter(Boolean),
+      ...decisions.close.map((c) => openPositions.find((p) => p.id === c.id)?.pair).filter(Boolean),
     ]);
-    const observeByPair = new Map(
-      (decisions.observe ?? []).map((o) => [o.pair, o.thoughts]),
-    );
+    const observeByPair = new Map((decisions.observe ?? []).map((o) => [o.pair, o.thoughts]));
     for (const pair of allPairs) {
       if (!pairsWithAction.has(pair)) {
         const price = priceMap[pair] ?? 0;
         const thoughts = observeByPair.get(pair);
-        const reasoning = thoughts?.trim()
-          ? `${thoughts} (Price: ${price})`
-          : `Price: ${price}`;
-        await this.pairKnowledge.addObservation(userId, pair, cycleNum, price, reasoning);
+        const reasoning = thoughts?.trim() ? `${thoughts} (Price: ${price})` : `Price: ${price}`;
+        await this.pairKnowledge.addObservation(
+          userId,
+          pair,
+          cycleNum,
+          price,
+          reasoning,
+          worksheetMap.get(pair) ? this.indicators.snapshot(worksheetMap.get(pair)!) : undefined,
+        );
       }
     }
 
-    // 10. Save journal entry
+    // 12. Save cycle journal
     const journalDecisions: JournalDecisions = {
       opened: decisions.enter.map((e) => {
         const pos = watchingPositions.find((p) => p.id === e.id);
@@ -292,9 +307,21 @@ export class TradingAgentService {
       instruction?: string;
       mode?: string;
     }>,
-    pairJournals: Array<{ pair: string; confidence: number; summarisedKnowledge: string; entries: Array<{ cycleNum: number; action: string; reasoning: string; outcome: { pnl?: number; closeReason?: string; price?: number } | null; createdAt: Date }> }>,
+    pairJournals: Array<{
+      pair: string;
+      confidence: number;
+      summarisedKnowledge: string;
+      entries: Array<{
+        cycleNum: number;
+        action: string;
+        reasoning: string;
+        mathAnalysis: { rsi14: number; emaTrend: string; macdHistogram: number; bbPosition: number; trendSlope: number; volatilityPct: number } | null;
+        outcome: { pnl?: number; closeReason?: string; price?: number } | null;
+        createdAt: Date;
+      }>;
+    }>,
+    worksheetMap: Map<string, PairWorksheet>,
     priceMap: Record<string, number>,
-    candlesMap: Record<string, Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>>,
   ): string {
     const journalSection =
       recentJournal.length === 0
@@ -318,11 +345,10 @@ export class TradingAgentService {
         ? 'No pairs waiting to enter.'
         : watchingPositions
             .map((p) => {
-              const current = priceMap[p.pair];
               const instr = p.instruction?.trim();
               const instrLine = instr ? ` | instruction: ${instr}` : '';
-              const modeLine = p.mode === 'LIVE' ? ' | mode: LIVE (user chose real trading)' : '';
-              return `id:${p.id} | ${p.pair} ${p.direction} | risk: ${p.riskAppetite} | current price: ${current ?? '?'}${modeLine}${instrLine}`;
+              const modeLine = p.mode === 'LIVE' ? ' | mode: LIVE (real money)' : '';
+              return `id:${p.id} | ${p.pair} ${p.direction} | risk: ${p.riskAppetite}${modeLine}${instrLine}`;
             })
             .join('\n');
 
@@ -344,34 +370,53 @@ export class TradingAgentService {
                 : 0;
               const instr = p.instruction?.trim();
               const instrLine = instr ? ` | instruction: ${instr}` : '';
-              const modeLine = p.mode === 'LIVE' ? ' | mode: LIVE (user chose real trading)' : '';
+              const modeLine = p.mode === 'LIVE' ? ' | mode: LIVE (real money)' : '';
               return `id:${p.id} | ${p.pair} ${p.direction} | entry: ${entry} | current: ${current ?? '?'} | pnl: ${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}% | open ${hoursOpen}h${modeLine}${instrLine}`;
             })
             .join('\n');
 
-    const candleSection = Object.entries(candlesMap)
-      .map(([pair, candles]) => {
-        const rows = candles
-          .slice(-24)
-          .map((c) => `${new Date(c.time).toISOString().slice(11, 16)} O:${c.open} H:${c.high} L:${c.low} C:${c.close} V:${Math.round(c.volume)}`)
-          .join(' | ');
-        return `${pair}: ${rows}`;
-      })
-      .join('\n');
-
-    const pairJournalSection =
+    const pairAnalysisSection =
       pairJournals.length === 0
-        ? 'No pair journals yet.'
+        ? 'No pair data yet.'
         : pairJournals
             .map((pj) => {
-              const summary = pj.summarisedKnowledge;
+              const ws = worksheetMap.get(pj.pair);
+              const worksheetBlock = ws
+                ? [
+                    `  Indicators:`,
+                    `    RSI(14)=${ws.indicators.rsi14} | EMA trend=${ws.indicators.emaTrend} (ema20=${ws.indicators.ema20} vs ema50=${ws.indicators.ema50})`,
+                    `    MACD histogram=${ws.indicators.macdHistogram > 0 ? '+' : ''}${ws.indicators.macdHistogram} (${ws.indicators.macdHistogram > 0 ? 'bullish' : ws.indicators.macdHistogram < 0 ? 'bearish' : 'neutral'} momentum)`,
+                    `    Bollinger: price at ${(ws.indicators.bbPosition * 100).toFixed(0)}% of band [${ws.indicators.bbLower}–${ws.indicators.bbUpper}]`,
+                    `    Volume ratio=${ws.indicators.volumeRatio}x avg | ATR(14)=${ws.indicators.atr14} (${ws.model.volatilityPct}% volatility)`,
+                    `  Trend model (20-candle regression):`,
+                    `    Slope=${ws.model.trendSlope > 0 ? '+' : ''}${ws.model.trendSlope}/candle | R²=${ws.model.trendR2} | predicted next close=${ws.model.predictedNext}`,
+                    `    Support=${ws.model.supportLevel} | Resistance=${ws.model.resistanceLevel}`,
+                  ].join('\n')
+                : '  No worksheet computed yet.';
+
               const recent = pj.entries.slice(0, 5);
-              const lines = recent.map(
-                (e) =>
-                  `  Cycle ${e.cycleNum} ${e.action}: ${e.reasoning}${e.outcome ? ` (outcome: ${JSON.stringify(e.outcome)})` : ''}`,
-              );
-              const knowledgeBlock = summary ? `\n  Knowledge: ${summary}` : '';
-              return `${pj.pair} (confidence: ${pj.confidence.toFixed(0)}%):${knowledgeBlock}\n${lines.join('\n')}`;
+              const entryLines = recent.map((e) => {
+                const math = e.mathAnalysis
+                  ? ` [RSI=${e.mathAnalysis.rsi14} ema=${e.mathAnalysis.emaTrend} macd=${e.mathAnalysis.macdHistogram > 0 ? '+' : ''}${e.mathAnalysis.macdHistogram} bb=${(e.mathAnalysis.bbPosition * 100).toFixed(0)}% slope=${e.mathAnalysis.trendSlope > 0 ? '+' : ''}${e.mathAnalysis.trendSlope}]`
+                  : '';
+                const outcome = e.outcome && 'pnl' in e.outcome && e.outcome.pnl != null
+                  ? ` → ${e.outcome.pnl >= 0 ? '+' : ''}${e.outcome.pnl.toFixed(2)}% (${e.outcome.closeReason})`
+                  : '';
+                return `  Cycle ${e.cycleNum} ${e.action}: ${e.reasoning}${math}${outcome}`;
+              });
+
+              const knowledgeLine = pj.summarisedKnowledge
+                ? `  Accumulated knowledge: ${pj.summarisedKnowledge}`
+                : '';
+
+              return [
+                `${pj.pair} (confidence: ${pj.confidence.toFixed(0)}%):`,
+                knowledgeLine,
+                worksheetBlock,
+                entryLines.length > 0 ? `  Recent decisions:\n${entryLines.join('\n')}` : '',
+              ]
+                .filter(Boolean)
+                .join('\n');
             })
             .join('\n\n');
 
@@ -380,43 +425,47 @@ export class TradingAgentService {
         ? `--- USER'S GOAL / INSTRUCTION ---\n${userInstruction.trim()}\n\n`
         : '';
 
-    return `You are a crypto trading agent running cycle #${cycleNum}. The user has chosen the pairs below — your job is to decide when to enter them and when to exit open positions.
-${instructionSection}--- YOUR JOURNAL (last entries) ---
+    return `You are a crypto trading agent running cycle #${cycleNum}. Your job is to analyse each pair mathematically and historically, then make a clear decision and record your thinking.
+
+${instructionSection}--- YOUR PAST CYCLE JOURNALS ---
 ${journalSection}
 
---- PAST OUTCOMES (closed positions) ---
+--- PAST OUTCOMES (recently closed positions) ---
 ${outcomesSection}
 
 --- WATCHING — pairs waiting to enter ---
 ${watchingSection}
 
---- OPEN — positions already in the market ---
+--- OPEN — positions currently in the market ---
 ${openSection}
 
---- PAIR JOURNALS (your past reasoning per pair) ---
-${pairJournalSection}
+--- PAIR ANALYSIS (indicators + history per pair) ---
+${pairAnalysisSection}
 
---- MARKET CANDLES (1h, last 24 candles per pair) ---
-${candleSection}
+--- HOW TO THINK AND DECIDE ---
+For each pair, work through these steps in your journal:
+1. MARKET READ: What do the indicators say? (RSI overbought/oversold? EMA trend direction? MACD momentum? Bollinger position? Volume confirmation?)
+2. TREND MODEL: What does the regression slope say about direction and strength (R²)? Where is price relative to support/resistance?
+3. HISTORY REVIEW: What happened in past cycles for this pair? Did previous entries at similar indicator levels work out? What patterns have emerged?
+4. DECISION: Based on the above, what is the right action? Enter, hold, close, or observe — and why specifically?
+
+For WATCHING pairs: enter only when indicators clearly align (e.g. RSI recovering from oversold + bullish EMA cross + positive MACD).
+For OPEN positions: close with PROFIT_TARGET if momentum is fading near resistance; close with DRAWDOWN_LIMIT if trend has reversed and indicators confirm it.
+When mode is LIVE (real money), apply extra caution — require stronger confirmation before entering or exiting.
 
 --- INSTRUCTIONS ---
-1. For WATCHING pairs: decide if now is a good entry point based on candle momentum and trend. Enter only if conditions are clearly favourable.
-2. For OPEN positions: decide whether to hold or close. Close with PROFIT_TARGET if in meaningful profit and momentum is fading; close with DRAWDOWN_LIMIT if losing and trend is against it.
-3. When a pair shows "mode: LIVE (user chose real trading)", the user has manually overridden to use real funds. Your enter/exit decisions will execute with real money — treat these with appropriate care.
-4. When a pair has an "instruction", factor it into your decision (e.g. "prefer longer holds", "exit quickly on any profit", "be conservative").
-5. Do NOT invent new pairs — only act on the IDs listed above.
-6. For EACH enter or close decision, provide a short "reasoning" (1-2 sentences) explaining why. This will be stored in the pair journal for the user to review.
-7. For EACH pair you are NOT entering or closing, provide a brief "observe" entry with your thoughts (1-2 sentences): what you're seeing — price action, momentum, why you're holding. This will be stored in the pair journal.
-8. Write a concise journal entry (3-5 sentences) about what you observed and decided.
+1. For each enter or close, provide "reasoning" that explicitly references the indicators and history that drove the decision.
+2. For each pair you are NOT entering or closing, provide an "observe" entry with your mathematical read and what you're watching for.
+3. Write a concise cycle journal (4-6 sentences) covering: what the market looks like across pairs, what the indicators showed, what you decided and why, and what you're watching next cycle.
 
 Respond ONLY with valid JSON — no markdown fences, no extra text:
 {
   "decisions": {
-    "enter": [{"id": "<position-id>", "reasoning": "Why you're entering now..."}],
-    "close": [{"id": "<position-id>", "reason": "PROFIT_TARGET" | "DRAWDOWN_LIMIT", "reasoning": "Why you're closing now..."}],
-    "observe": [{"pair": "BTC/USDT", "thoughts": "Your brief observation about this pair..."}]
+    "enter": [{"id": "<position-id>", "reasoning": "Specific indicator + history reasoning for entry..."}],
+    "close": [{"id": "<position-id>", "reason": "PROFIT_TARGET" | "DRAWDOWN_LIMIT", "reasoning": "Specific indicator + history reasoning for exit..."}],
+    "observe": [{"pair": "BTC/USDT", "thoughts": "Mathematical read and what you're watching..."}]
   },
-  "journal": "Your reflection here..."
+  "journal": "Cycle #${cycleNum} thinking: market read → indicator signals → decisions made → what to watch..."
 }`;
   }
 

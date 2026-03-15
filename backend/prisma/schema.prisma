@@ -104,12 +104,13 @@ model AgentJournal {
 }
 
 model PairJournal {
-  id                 String   @id @default(uuid())
-  userId             String
-  pair               String
-  confidence         Float    @default(0)
-  summarisedKnowledge String @default("")
-  updatedAt          DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  userId              String
+  pair                String
+  confidence          Float    @default(0)
+  summarisedKnowledge String   @default("")
+  worksheet           Json?    // Latest computed PairWorksheet (indicators + model)
+  updatedAt           DateTime @updatedAt
 
   entries PairJournalEntry[]
 
@@ -121,9 +122,10 @@ model PairJournalEntry {
   id            String   @id @default(uuid())
   pairJournalId String
   cycleNum      Int
-  action        String   // "ENTER" | "EXIT"
+  action        String   // "ENTER" | "EXIT" | "OBSERVE"
   reasoning     String
-  outcome       Json?    // { pnl, closeReason } when EXIT
+  outcome       Json?    // { pnl, closeReason } when EXIT; { price } when OBSERVE
+  mathAnalysis  Json?    // EntryMathSnapshot — indicator state at decision time
   createdAt     DateTime @default(now())
 
   pairJournal PairJournal @relation(fields: [pairJournalId], references: [id], onDelete: Cascade)

@@ -5,6 +5,7 @@ import { PairJournalsController } from './pair-journals.controller';
 import { AgentJournalRepository } from './agent-journal.repository';
 import { AgentInstructionRepository } from './agent-instruction.repository';
 import { PairKnowledgeModule } from '../pair-knowledge/pair-knowledge.module';
+import { IndicatorsModule } from '../indicators/indicators.module';
 import { BinanceModule } from '../binance/binance.module';
 import { AiModule } from '../ai/ai.module';
 import { PrismaModule } from '../common/prisma/prisma.module';
@@ -12,7 +13,7 @@ import { PositionsModule } from '../positions/positions.module';
 import { ExecutionModule } from '../execution/execution.module';
 
 @Module({
-  imports: [BinanceModule, AiModule, PrismaModule, PositionsModule, ExecutionModule, PairKnowledgeModule],
+  imports: [BinanceModule, AiModule, PrismaModule, PositionsModule, ExecutionModule, PairKnowledgeModule, IndicatorsModule],
   providers: [TradingAgentService, AgentJournalRepository, AgentInstructionRepository],
   controllers: [AgentController, PairJournalsController],
 })
