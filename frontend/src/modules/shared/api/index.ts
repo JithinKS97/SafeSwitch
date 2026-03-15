@@ -6,6 +6,8 @@ export type TradeDirection = 'LONG' | 'SHORT'
 export type TradingMode = 'PAPER' | 'LIVE'
 export type PositionStatus = 'INACTIVE' | 'ACTIVE' | 'COMPLETED' | 'STOPPED'
 
+export type CloseReason = 'PROFIT_TARGET' | 'DRAWDOWN_LIMIT' | 'MANUAL'
+
 export type Position = {
   id: string
   pair: string
@@ -18,6 +20,7 @@ export type Position = {
   pnl: number
   entryPrice: number | null
   currentPrice: number | null
+  closeReason?: CloseReason | null
   instruction?: string
   createdAt: string
   activatedAt: string | null

@@ -260,13 +260,28 @@ export function PositionRow({
         <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-xs tabular-nums text-zinc-600 dark:text-zinc-400">
           {(position.amount ?? 0) > 0 ? (
             <>
-              ${position.amount.toFixed(0)}
-              {showPnl && (
-                <span className={`ml-1.5 ${displayPnl >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {(position.amount * displayPnl) / 100 >= 0 ? '+' : '-'}$
-                  {Math.abs((position.amount * displayPnl) / 100).toFixed(2)}
-                </span>
-              )}
+              {(() => {
+                // When agent closed (PROFIT_TARGET/DRAWDOWN_LIMIT), backend stores amount as final value; derive original to show "invested ± gained/lost"
+                const amt = position.amount ?? 0
+                const pct = displayPnl
+                const amountWasUpdated =
+                  (isClosed || isPaused) &&
+                  position.closeReason &&
+                  position.closeReason !== 'MANUAL'
+                const invested =
+                  showPnl && pct !== 0 && amountWasUpdated ? amt / (1 + pct / 100) : amt
+                const gainedLost = showPnl ? (invested * pct) / 100 : 0
+                return (
+                  <>
+                    ${invested.toFixed(0)}
+                    {showPnl && (
+                      <span className={`ml-1.5 ${gainedLost >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {gainedLost >= 0 ? '+' : '-'}${Math.abs(gainedLost).toFixed(2)}
+                      </span>
+                    )}
+                  </>
+                )
+              })()}
             </>
           ) : (
             '—'

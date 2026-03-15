@@ -22,6 +22,22 @@ export class PositionsRepository {
     });
   }
 
+  /** Load position by id only (for execution; no userId filter). */
+  findByIdForExecution(id: string) {
+    return this.prisma.position.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        userId: true,
+        pair: true,
+        direction: true,
+        amount: true,
+        entryPrice: true,
+        liveQuantity: true,
+      },
+    });
+  }
+
   findActiveByPair(pair: string, userId: string) {
     // STOPPED = paused by user — still "belongs" to them, block re-adding
     return this.prisma.position.findFirst({
@@ -56,6 +72,19 @@ export class PositionsRepository {
     return this.prisma.position.update({
       where: { id },
       data: { status: 'ACTIVE', entryPrice, activatedAt: new Date(), agentOpened: true },
+    });
+  }
+
+  activateByAgentWithLive(id: string, entryPrice: number, liveQuantity: number) {
+    return this.prisma.position.update({
+      where: { id },
+      data: {
+        status: 'ACTIVE',
+        entryPrice,
+        liveQuantity,
+        activatedAt: new Date(),
+        agentOpened: true,
+      },
     });
   }
 
