@@ -77,10 +77,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   positions: {
     list: () => request<Position[]>('/positions'),
-    create: (pair: string, direction: TradeDirection, riskAppetite: RiskAppetite, amount: number) =>
+    create: (pair: string, direction: TradeDirection, riskAppetite: RiskAppetite, amount?: number) =>
       request<Position>('/positions', {
         method: 'POST',
-        body: JSON.stringify({ pair, direction, riskAppetite, amount }),
+        body: JSON.stringify({ pair, direction, riskAppetite, ...(amount != null ? { amount } : {}) }),
       }),
     activate: (id: string) =>
       request<Position>(`/positions/${id}/activate`, { method: 'POST' }),
@@ -104,8 +104,13 @@ export const api = {
       request<Position>(`/positions/${id}/resume`, { method: 'POST' }),
     resetPnl: (id: string) =>
       request<Position>(`/positions/${id}/reset-pnl`, { method: 'POST' }),
-    delete: (id: string) =>
-      request<void>(`/positions/${id}`, { method: 'DELETE' }),
+    updateAmount: (id: string, amount: number) =>
+      request<Position>(`/positions/${id}/amount`, {
+        method: 'PATCH',
+        body: JSON.stringify({ amount }),
+      }),
+    delete: (id: string, wipeHistory = false) =>
+      request<void>(`/positions/${id}${wipeHistory ? '?wipeHistory=true' : ''}`, { method: 'DELETE' }),
   },
   suggestions: {
     generate: (riskPct: number) =>

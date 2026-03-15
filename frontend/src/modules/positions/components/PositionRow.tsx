@@ -162,6 +162,9 @@ export function PositionRow({
   const qc = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
   const [instructionModalOpen, setInstructionModalOpen] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [goLiveModalOpen, setGoLiveModalOpen] = useState(false)
+  const [liveAmount, setLiveAmount] = useState('')
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
   const invalidate = () => qc.invalidateQueries({ queryKey: ['positions'] })
@@ -182,7 +185,7 @@ export function PositionRow({
     },
   })
   const remove = useMutation({
-    mutationFn: () => api.positions.delete(position.id),
+    mutationFn: (wipeHistory: boolean) => api.positions.delete(position.id, wipeHistory),
     onMutate: async () => {
       await qc.cancelQueries({ queryKey: ['positions'] })
       const prev = qc.getQueryData<Position[]>(['positions'])
@@ -332,7 +335,7 @@ export function PositionRow({
               <>
                 {position.mode === 'PAPER' ? (
                   <button
-                    onClick={() => window.confirm(`Switch ${position.pair} to LIVE trading? Real funds will be used.`) && switchMode.mutate('LIVE')}
+                    onClick={() => { setLiveAmount(''); setGoLiveModalOpen(true) }}
                     disabled={switchMode.isPending}
                     title={
                       pairJournal && pairJournal.confidence >= 70
@@ -368,7 +371,7 @@ export function PositionRow({
             )}
             <Btn
               variant="danger"
-              onClick={() => window.confirm(`Delete ${position.pair}?`) && remove.mutate()}
+              onClick={() => setDeleteModalOpen(true)}
               disabled={remove.isPending}
             >
               {remove.isPending ? 'Deleting…' : 'Delete'}
@@ -406,6 +409,105 @@ export function PositionRow({
             isPending={updateInstruction.isPending}
           />
         )}
+      {mounted && goLiveModalOpen && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setGoLiveModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1">
+              Go live — {position.pair}
+            </h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
+              How much USDT do you want to commit to this trade? Real funds will be used.
+            </p>
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1.5">
+              Amount (USDT)
+            </label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={liveAmount}
+              onChange={(e) => setLiveAmount(e.target.value)}
+              placeholder="e.g. 500"
+              className="w-full rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 font-mono tabular-nums text-sm mb-5"
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setGoLiveModalOpen(false)}
+                className="rounded px-3 py-1.5 text-xs font-medium border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const amt = parseFloat(liveAmount)
+                  if (!amt || amt < 1) return
+                  await api.positions.updateAmount(position.id, amt)
+                  await api.positions.resetPnl(position.id)
+                  switchMode.mutate('LIVE')
+                  setGoLiveModalOpen(false)
+                }}
+                disabled={!liveAmount || parseFloat(liveAmount) < 1 || switchMode.isPending}
+                className="rounded px-3 py-1.5 text-xs font-medium bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50 transition"
+              >
+                {switchMode.isPending ? 'Switching…' : 'Confirm & go live'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+      {mounted && deleteModalOpen && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setDeleteModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1">
+              Delete {position.pair}?
+            </h3>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-5">
+              The agent has built up knowledge and confidence for this pair. Choose what to keep.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => { remove.mutate(false); setDeleteModalOpen(false) }}
+                className="w-full rounded-lg border border-zinc-200 dark:border-zinc-700 px-4 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-900 transition"
+              >
+                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Delete position only</p>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Keeps confidence score, journal history, and all analysis. Re-adding this pair picks up where it left off.
+                </p>
+              </button>
+              <button
+                onClick={() => { remove.mutate(true); setDeleteModalOpen(false) }}
+                className="w-full rounded-lg border border-red-200 dark:border-red-900 px-4 py-3 text-left hover:bg-red-50 dark:hover:bg-red-950/40 transition"
+              >
+                <p className="text-sm font-medium text-red-600 dark:text-red-400">Delete everything</p>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Removes the position and wipes all agent knowledge for this pair. Confidence resets to 0.
+                </p>
+              </button>
+              <button
+                onClick={() => setDeleteModalOpen(false)}
+                className="w-full rounded px-4 py-2 text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </>
   )
 }

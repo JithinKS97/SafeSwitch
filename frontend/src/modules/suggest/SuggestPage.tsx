@@ -23,8 +23,6 @@ export function SuggestPage() {
   const [result, setResult] = useState<SuggestionsResponse | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [added, setAdded] = useState<Set<string>>(new Set())
-  const [addModal, setAddModal] = useState<Suggestion | null>(null)
-  const [modalAmount, setModalAmount] = useState(100)
 
   const { data: positions = [] } = useQuery({ queryKey: ['positions'], queryFn: api.positions.list })
   const activePairs = new Set(
@@ -73,11 +71,10 @@ export function SuggestPage() {
   })
 
   const addPosition = useMutation({
-    mutationFn: ({ suggestion, amount }: { suggestion: Suggestion; amount: number }) =>
-      api.positions.create(suggestion.pair, suggestion.direction, suggestion.riskLevel, amount),
-    onSuccess: (_, { suggestion }) => {
+    mutationFn: (suggestion: Suggestion) =>
+      api.positions.create(suggestion.pair, suggestion.direction, suggestion.riskLevel),
+    onSuccess: (_, suggestion) => {
       setAdded((prev) => new Set([...prev, suggestion.pair]))
-      setAddModal(null)
       qc.invalidateQueries({ queryKey: ['positions'] })
     },
   })
@@ -302,12 +299,7 @@ export function SuggestPage() {
                             <td className="px-3 py-3 max-w-xs text-xs text-zinc-500 leading-relaxed">{s.reason}</td>
                             <td className="py-3 pl-3 pr-4 text-right">
                               <button
-                                onClick={() => {
-                                if (!isAdded) {
-                                  setAddModal(s)
-                                  setModalAmount(100)
-                                }
-                              }}
+                                onClick={() => { if (!isAdded) addPosition.mutate(s) }}
                                 disabled={isAdded || addPosition.isPending}
                                 className={`rounded px-2.5 py-1 text-xs font-medium transition ${
                                   isAdded
@@ -337,53 +329,6 @@ export function SuggestPage() {
             </section>
           )}
 
-          {/* Add pair modal */}
-          {addModal && (
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-              onClick={() => !addPosition.isPending && setAddModal(null)}
-            >
-              <div
-                className="w-full max-w-sm rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-xl"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1">
-                  Add {addModal.pair}
-                </h3>
-                <p className="text-xs text-zinc-500 mb-4">
-                  {addModal.direction} · {addModal.riskLevel} risk
-                </p>
-                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-2">
-                  Amount (USDT)
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={modalAmount}
-                  onChange={(e) => setModalAmount(Number(e.target.value) || 0)}
-                  className="w-full rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 font-mono tabular-nums text-sm mb-4"
-                  autoFocus
-                />
-                <div className="flex gap-2 justify-end">
-                  <button
-                    onClick={() => setAddModal(null)}
-                    disabled={addPosition.isPending}
-                    className="rounded px-3 py-1.5 text-xs font-medium border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => addPosition.mutate({ suggestion: addModal, amount: modalAmount })}
-                    disabled={addPosition.isPending || modalAmount < 1}
-                    className="rounded px-3 py-1.5 text-xs font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-zinc-300 disabled:opacity-50"
-                  >
-                    {addPosition.isPending ? 'Adding…' : 'Add'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </main>
