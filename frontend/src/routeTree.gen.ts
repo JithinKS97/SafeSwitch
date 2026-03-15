@@ -9,78 +9,127 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SuggestRouteImport } from './routes/suggest'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
+import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedSuggestRouteImport } from './routes/_authenticated/suggest'
 
-const SuggestRoute = SuggestRouteImport.update({
-  id: '/suggest',
-  path: '/suggest',
+const SignInRoute = SignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
+const AuthenticatedRoute = AuthenticatedRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedSuggestRoute = AuthenticatedSuggestRouteImport.update({
+  id: '/suggest',
+  path: '/suggest',
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/suggest': typeof SuggestRoute
+  '/': typeof AuthenticatedIndexRoute
+  '/sign-in': typeof SignInRoute
+  '/suggest': typeof AuthenticatedSuggestRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/suggest': typeof SuggestRoute
+  '/sign-in': typeof SignInRoute
+  '/suggest': typeof AuthenticatedSuggestRoute
+  '/': typeof AuthenticatedIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/suggest': typeof SuggestRoute
+  '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/sign-in': typeof SignInRoute
+  '/_authenticated/suggest': typeof AuthenticatedSuggestRoute
+  '/_authenticated/': typeof AuthenticatedIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/suggest'
+  fullPaths: '/' | '/sign-in' | '/suggest'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/suggest'
-  id: '__root__' | '/' | '/suggest'
+  to: '/sign-in' | '/suggest' | '/'
+  id:
+    | '__root__'
+    | '/_authenticated'
+    | '/sign-in'
+    | '/_authenticated/suggest'
+    | '/_authenticated/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  SuggestRoute: typeof SuggestRoute
+  AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  SignInRoute: typeof SignInRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/suggest': {
-      id: '/suggest'
-      path: '/suggest'
-      fullPath: '/suggest'
-      preLoaderRoute: typeof SuggestRouteImport
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/': {
+      id: '/_authenticated/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/suggest': {
+      id: '/_authenticated/suggest'
+      path: '/suggest'
+      fullPath: '/suggest'
+      preLoaderRoute: typeof AuthenticatedSuggestRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
   }
 }
 
+interface AuthenticatedRouteChildren {
+  AuthenticatedSuggestRoute: typeof AuthenticatedSuggestRoute
+  AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+}
+
+const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedSuggestRoute: AuthenticatedSuggestRoute,
+  AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+}
+
+const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
+  AuthenticatedRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  SuggestRoute: SuggestRoute,
+  AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  SignInRoute: SignInRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

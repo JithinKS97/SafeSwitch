@@ -4,11 +4,14 @@ import * as request from 'supertest';
 import { SuggestionsController } from './suggestions.controller';
 import { SuggestionsService } from './suggestions.service';
 import { HttpExceptionFilter } from '../common/filters/http-exception.filter';
-import type { Suggestion } from './suggestions.types';
+import type { SuggestionsResponse } from './suggestions.types';
 
-const mockSuggestions: Suggestion[] = [
-  { pair: 'BTC/USDT', direction: 'LONG', duration: '3–7 days', reason: 'Strong support', riskLevel: 'LOW' },
-];
+const mockResponse: SuggestionsResponse = {
+  analysis: 'BTC shows strong support. Low volatility environment favours conservative longs.',
+  suggestions: [
+    { pair: 'BTC/USDT', direction: 'LONG', duration: '3–7 days', reason: 'Strong support', riskLevel: 'LOW' },
+  ],
+};
 
 describe('SuggestionsController', () => {
   let app: INestApplication;
@@ -33,43 +36,45 @@ describe('SuggestionsController', () => {
   afterEach(() => app.close());
 
   describe('POST /suggestions', () => {
-    it('returns 200 with suggestions for LOW risk', async () => {
-      service.getSuggestions.mockReturnValue(mockSuggestions);
+    it('returns 200 with analysis and suggestions', async () => {
+      service.getSuggestions.mockResolvedValue(mockResponse);
       const res = await request(app.getHttpServer())
         .post('/suggestions')
-        .send({ riskAppetite: 'LOW' });
+        .send({ riskPct: 20 });
       expect(res.status).toBe(200);
-      expect(res.body).toHaveLength(1);
-      expect(res.body[0].pair).toBe('BTC/USDT');
+      expect(res.body.analysis).toBeTruthy();
+      expect(res.body.suggestions[0].pair).toBe('BTC/USDT');
     });
 
-    it('returns 200 with suggestions for MEDIUM risk', async () => {
-      service.getSuggestions.mockReturnValue(mockSuggestions);
-      const res = await request(app.getHttpServer())
-        .post('/suggestions')
-        .send({ riskAppetite: 'MEDIUM' });
-      expect(res.status).toBe(200);
-      expect(service.getSuggestions).toHaveBeenCalledWith('MEDIUM');
+    it('passes the riskPct number to the service', async () => {
+      service.getSuggestions.mockResolvedValue(mockResponse);
+      await request(app.getHttpServer()).post('/suggestions').send({ riskPct: 75 });
+      expect(service.getSuggestions).toHaveBeenCalledWith(75);
     });
 
-    it('returns 200 with suggestions for HIGH risk', async () => {
-      service.getSuggestions.mockReturnValue(mockSuggestions);
-      const res = await request(app.getHttpServer())
-        .post('/suggestions')
-        .send({ riskAppetite: 'HIGH' });
-      expect(res.status).toBe(200);
-      expect(service.getSuggestions).toHaveBeenCalledWith('HIGH');
-    });
-
-    it('returns 400 when riskAppetite is missing', async () => {
+    it('returns 400 when riskPct is missing', async () => {
       const res = await request(app.getHttpServer()).post('/suggestions').send({});
       expect(res.status).toBe(400);
     });
 
-    it('returns 400 when riskAppetite is not a valid enum value', async () => {
+    it('returns 400 when riskPct is below 0', async () => {
       const res = await request(app.getHttpServer())
         .post('/suggestions')
-        .send({ riskAppetite: 'EXTREME' });
+        .send({ riskPct: -1 });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 when riskPct is above 100', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/suggestions')
+        .send({ riskPct: 101 });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 when riskPct is not an integer', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/suggestions')
+        .send({ riskPct: 50.5 });
       expect(res.status).toBe(400);
     });
   });

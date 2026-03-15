@@ -8,6 +8,7 @@ datasource db {
 
 model Position {
   id           String         @id @default(uuid())
+  userId       String
   pair         String
   direction    TradeDirection
   riskAppetite RiskAppetite
@@ -26,6 +27,17 @@ model Position {
   trades       Trade[]
 
   @@map("positions")
+}
+
+model SuggestionSnapshot {
+  id          String   @id @default(uuid())
+  userId      String
+  riskPct     Int
+  analysis    String
+  suggestions Json
+  createdAt   DateTime @default(now())
+
+  @@map("suggestion_snapshots")
 }
 
 model Trade {

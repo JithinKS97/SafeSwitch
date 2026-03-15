@@ -1,7 +1,8 @@
-import { IsEnum } from 'class-validator';
-import { RiskAppetite } from '../../common/types/enums';
+import { IsInt, Max, Min } from 'class-validator';
 
 export class GetSuggestionsDto {
-  @IsEnum(RiskAppetite)
-  riskAppetite: RiskAppetite;
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  riskPct: number;
 }

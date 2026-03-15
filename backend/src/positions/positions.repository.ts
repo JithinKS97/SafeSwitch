@@ -7,29 +7,31 @@ import { CreatePositionDto } from './dto/create-position.dto';
 export class PositionsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll() {
+  findAll(userId: string) {
     return this.prisma.position.findMany({
+      where: { userId },
       orderBy: { createdAt: 'desc' },
       include: { trades: { orderBy: { openedAt: 'desc' }, take: 5 } },
     });
   }
 
-  findById(id: string) {
-    return this.prisma.position.findUnique({
-      where: { id },
+  findById(id: string, userId: string) {
+    return this.prisma.position.findFirst({
+      where: { id, userId },
       include: { trades: { orderBy: { openedAt: 'desc' } } },
     });
   }
 
-  findActiveByPair(pair: string) {
+  findActiveByPair(pair: string, userId: string) {
     return this.prisma.position.findFirst({
-      where: { pair, status: { in: ['INACTIVE', 'ACTIVE'] } },
+      where: { pair, userId, status: { in: ['INACTIVE', 'ACTIVE'] } },
     });
   }
 
-  create(dto: CreatePositionDto) {
+  create(dto: CreatePositionDto, userId: string) {
     return this.prisma.position.create({
       data: {
+        userId,
         pair: dto.pair,
         direction: dto.direction,
         riskAppetite: dto.riskAppetite,
@@ -40,28 +42,18 @@ export class PositionsRepository {
   activate(id: string) {
     return this.prisma.position.update({
       where: { id },
-      data: {
-        status: PositionStatus.ACTIVE,
-        activatedAt: new Date(),
-      },
+      data: { status: PositionStatus.ACTIVE, activatedAt: new Date() },
     });
   }
 
   switchMode(id: string, mode: TradingMode) {
-    return this.prisma.position.update({
-      where: { id },
-      data: { mode },
-    });
+    return this.prisma.position.update({ where: { id }, data: { mode } });
   }
 
   stop(id: string, reason: CloseReason) {
     return this.prisma.position.update({
       where: { id },
-      data: {
-        status: PositionStatus.STOPPED,
-        closeReason: reason,
-        closedAt: new Date(),
-      },
+      data: { status: PositionStatus.STOPPED, closeReason: reason, closedAt: new Date() },
     });
   }
 
@@ -70,9 +62,6 @@ export class PositionsRepository {
   }
 
   updateConfidence(id: string, confidence: number, pnl: number) {
-    return this.prisma.position.update({
-      where: { id },
-      data: { confidence, pnl },
-    });
+    return this.prisma.position.update({ where: { id }, data: { confidence, pnl } });
   }
 }

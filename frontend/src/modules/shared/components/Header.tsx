@@ -1,9 +1,13 @@
 import { Link } from '@tanstack/react-router'
+import { UserButton, useAuth } from '@clerk/tanstack-react-start'
+import { Skeleton } from '../../../components/ui/skeleton'
 
 export default function Header() {
+  const { isLoaded } = useAuth()
+
   return (
-    <header className="sticky top-0 z-50 border-b border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-zinc-950/90 backdrop-blur">
-      <nav className="page-wrap flex items-center gap-6 px-4 py-3">
+    <header className="sticky top-0 z-50 bg-white/90 dark:bg-zinc-950/90 backdrop-blur border-b border-zinc-200 dark:border-zinc-800">
+      <nav className="page-wrap flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-4 text-sm">
           <Link
             to="/"
@@ -18,6 +22,11 @@ export default function Header() {
             Suggest
           </Link>
         </div>
+        {isLoaded ? (
+          <UserButton />
+        ) : (
+          <Skeleton className="size-8 rounded-full" />
+        )}
       </nav>
     </header>
   )

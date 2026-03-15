@@ -1,5 +1,12 @@
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 
+async function getToken(): Promise<string | null> {
+  if (typeof window === 'undefined') return null
+  // window.Clerk is injected by ClerkProvider
+  return (window as unknown as { Clerk?: { session?: { getToken: () => Promise<string> } } })
+    .Clerk?.session?.getToken() ?? null
+}
+
 export type RiskAppetite = 'LOW' | 'MEDIUM' | 'HIGH'
 export type TradeDirection = 'LONG' | 'SHORT'
 export type TradingMode = 'PAPER' | 'LIVE'
@@ -29,9 +36,28 @@ export type Suggestion = {
   riskLevel: RiskAppetite
 }
 
+export type SuggestionsResponse = {
+  id?: string
+  riskPct?: number
+  analysis: string
+  suggestions: Suggestion[]
+  createdAt?: string
+}
+
+export type SnapshotSummary = {
+  id: string
+  riskPct: number
+  analysis: string
+  createdAt: string
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = await getToken()
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...options,
   })
   if (!res.ok) {
@@ -62,10 +88,12 @@ export const api = {
       request<void>(`/positions/${id}`, { method: 'DELETE' }),
   },
   suggestions: {
-    get: (riskAppetite: RiskAppetite) =>
-      request<Suggestion[]>('/suggestions', {
+    generate: (riskPct: number) =>
+      request<SuggestionsResponse>('/suggestions', {
         method: 'POST',
-        body: JSON.stringify({ riskAppetite }),
+        body: JSON.stringify({ riskPct }),
       }),
+    history: () => request<SnapshotSummary[]>('/suggestions'),
+    getById: (id: string) => request<SuggestionsResponse>(`/suggestions/${id}`),
   },
 }

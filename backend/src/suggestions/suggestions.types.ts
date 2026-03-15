@@ -7,3 +7,18 @@ export type Suggestion = {
   reason: string;
   riskLevel: RiskAppetite;
 };
+
+export type SuggestionsResponse = {
+  id?: string;
+  riskPct?: number;
+  analysis: string;
+  suggestions: Suggestion[];
+  createdAt?: string;
+};
+
+export type SnapshotSummary = {
+  id: string;
+  riskPct: number;
+  analysis: string;
+  createdAt: string;
+};

@@ -1,16 +1,12 @@
 import {
   HeadContent,
+  Outlet,
   Scripts,
   createRootRouteWithContext,
 } from '@tanstack/react-router'
-import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
-import { TanStackDevtools } from '@tanstack/react-devtools'
-import Footer from '../modules/shared/components/Footer'
-import Header from '../modules/shared/components/Header'
+import { ClerkProvider } from '@clerk/tanstack-react-start'
 
 import TanStackQueryProvider from '../integrations/tanstack-query/root-provider'
-
-import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
 import appCss from '../styles.css?url'
 
@@ -25,23 +21,11 @@ const THEME_INIT_SCRIPT = `(function(){try{var stored=window.localStorage.getIte
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   head: () => ({
     meta: [
-      {
-        charSet: 'utf-8',
-      },
-      {
-        name: 'viewport',
-        content: 'width=device-width, initial-scale=1',
-      },
-      {
-        title: 'SafeSwitch',
-      },
+      { charSet: 'utf-8' },
+      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+      { title: 'SafeSwitch' },
     ],
-    links: [
-      {
-        rel: 'stylesheet',
-        href: appCss,
-      },
-    ],
+    links: [{ rel: 'stylesheet', href: appCss }],
   }),
   shellComponent: RootDocument,
 })
@@ -54,25 +38,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="font-sans antialiased [overflow-wrap:anywhere]">
-        <TanStackQueryProvider>
-          <div className="flex min-h-screen flex-col">
-            <Header />
-            <div className="flex-1">{children}</div>
-            <Footer />
-          </div>
-          <TanStackDevtools
-            config={{
-              position: 'bottom-right',
-            }}
-            plugins={[
-              {
-                name: 'Tanstack Router',
-                render: <TanStackRouterDevtoolsPanel />,
-              },
-              TanStackQueryDevtools,
-            ]}
-          />
-        </TanStackQueryProvider>
+        <ClerkProvider>
+          <TanStackQueryProvider>
+            {children}
+          </TanStackQueryProvider>
+        </ClerkProvider>
         <Scripts />
       </body>
     </html>

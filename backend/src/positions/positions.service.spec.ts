@@ -8,6 +8,8 @@ import { PositionsService } from './positions.service';
 import { PositionsRepository } from './positions.repository';
 import type { CreatePositionDto } from './dto/create-position.dto';
 
+const UID = 'user_test123';
+
 const mockRepo = () => ({
   findAll: jest.fn(),
   findById: jest.fn(),
@@ -22,6 +24,7 @@ const mockRepo = () => ({
 
 const basePosition = {
   id: 'pos-1',
+  userId: UID,
   pair: 'BTC/USDT',
   direction: 'LONG' as const,
   riskAppetite: 'LOW' as const,
@@ -57,12 +60,12 @@ describe('PositionsService', () => {
   describe('findById', () => {
     it('returns the position when found', async () => {
       repo.findById.mockResolvedValue(basePosition);
-      await expect(service.findById('pos-1')).resolves.toEqual(basePosition);
+      await expect(service.findById('pos-1', UID)).resolves.toEqual(basePosition);
     });
 
     it('throws NotFoundException when position does not exist', async () => {
       repo.findById.mockResolvedValue(null);
-      await expect(service.findById('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.findById('missing', UID)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -76,13 +79,13 @@ describe('PositionsService', () => {
     it('creates the position when no active pair exists', async () => {
       repo.findActiveByPair.mockResolvedValue(null);
       repo.create.mockResolvedValue(basePosition);
-      await expect(service.create(dto)).resolves.toEqual(basePosition);
-      expect(repo.create).toHaveBeenCalledWith(dto);
+      await expect(service.create(dto, UID)).resolves.toEqual(basePosition);
+      expect(repo.create).toHaveBeenCalledWith(dto, UID);
     });
 
     it('throws ConflictException when the pair already has an active position', async () => {
       repo.findActiveByPair.mockResolvedValue(basePosition);
-      await expect(service.create(dto)).rejects.toThrow(ConflictException);
+      await expect(service.create(dto, UID)).rejects.toThrow(ConflictException);
       expect(repo.create).not.toHaveBeenCalled();
     });
   });
@@ -91,17 +94,17 @@ describe('PositionsService', () => {
     it('activates an INACTIVE position', async () => {
       repo.findById.mockResolvedValue({ ...basePosition, status: 'INACTIVE' });
       repo.activate.mockResolvedValue({ ...basePosition, status: 'ACTIVE' });
-      await expect(service.activate('pos-1')).resolves.toMatchObject({ status: 'ACTIVE' });
+      await expect(service.activate('pos-1', UID)).resolves.toMatchObject({ status: 'ACTIVE' });
     });
 
     it('throws BadRequestException when position is already ACTIVE', async () => {
       repo.findById.mockResolvedValue({ ...basePosition, status: 'ACTIVE' });
-      await expect(service.activate('pos-1')).rejects.toThrow(BadRequestException);
+      await expect(service.activate('pos-1', UID)).rejects.toThrow(BadRequestException);
     });
 
     it('throws BadRequestException when position is STOPPED', async () => {
       repo.findById.mockResolvedValue({ ...basePosition, status: 'STOPPED' });
-      await expect(service.activate('pos-1')).rejects.toThrow(BadRequestException);
+      await expect(service.activate('pos-1', UID)).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -109,17 +112,17 @@ describe('PositionsService', () => {
     it('switches from PAPER to LIVE', async () => {
       repo.findById.mockResolvedValue({ ...basePosition, status: 'ACTIVE', mode: 'PAPER' });
       repo.switchMode.mockResolvedValue({ ...basePosition, status: 'ACTIVE', mode: 'LIVE' });
-      await expect(service.switchMode('pos-1', 'LIVE')).resolves.toMatchObject({ mode: 'LIVE' });
+      await expect(service.switchMode('pos-1', 'LIVE', UID)).resolves.toMatchObject({ mode: 'LIVE' });
     });
 
     it('throws BadRequestException when position is not ACTIVE', async () => {
       repo.findById.mockResolvedValue({ ...basePosition, status: 'INACTIVE', mode: 'PAPER' });
-      await expect(service.switchMode('pos-1', 'LIVE')).rejects.toThrow(BadRequestException);
+      await expect(service.switchMode('pos-1', 'LIVE', UID)).rejects.toThrow(BadRequestException);
     });
 
     it('throws BadRequestException when mode is already the same', async () => {
       repo.findById.mockResolvedValue({ ...basePosition, status: 'ACTIVE', mode: 'PAPER' });
-      await expect(service.switchMode('pos-1', 'PAPER')).rejects.toThrow(BadRequestException);
+      await expect(service.switchMode('pos-1', 'PAPER', UID)).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -127,12 +130,12 @@ describe('PositionsService', () => {
     it('stops an ACTIVE position', async () => {
       repo.findById.mockResolvedValue({ ...basePosition, status: 'ACTIVE' });
       repo.stop.mockResolvedValue({ ...basePosition, status: 'STOPPED' });
-      await expect(service.stop('pos-1')).resolves.toMatchObject({ status: 'STOPPED' });
+      await expect(service.stop('pos-1', UID)).resolves.toMatchObject({ status: 'STOPPED' });
     });
 
     it('throws BadRequestException when position is not ACTIVE', async () => {
       repo.findById.mockResolvedValue({ ...basePosition, status: 'INACTIVE' });
-      await expect(service.stop('pos-1')).rejects.toThrow(BadRequestException);
+      await expect(service.stop('pos-1', UID)).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -140,13 +143,13 @@ describe('PositionsService', () => {
     it('deletes an existing position', async () => {
       repo.findById.mockResolvedValue(basePosition);
       repo.delete.mockResolvedValue(basePosition);
-      await service.delete('pos-1');
+      await service.delete('pos-1', UID);
       expect(repo.delete).toHaveBeenCalledWith('pos-1');
     });
 
     it('throws NotFoundException when position does not exist', async () => {
       repo.findById.mockResolvedValue(null);
-      await expect(service.delete('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.delete('missing', UID)).rejects.toThrow(NotFoundException);
       expect(repo.delete).not.toHaveBeenCalled();
     });
   });
