@@ -9,9 +9,7 @@ function getTokenFromCookie(cookieHeader: string | null): string | null {
   return match ? decodeURIComponent(match[1]) : null
 }
 
-export const getSession = createServerFn({ method: 'GET' })
-  .validator((token: string | null) => token)
-  .handler(async (token) => {
+export const getSession = createServerFn({ method: 'GET' }).handler(async (token?: string | null) => {
     const request = getRequest()
     const cookie = request.headers.get('Cookie')
     const tokenToUse = token ?? getTokenFromCookie(cookie)
