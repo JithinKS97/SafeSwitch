@@ -102,6 +102,8 @@ export const api = {
       request<Position>(`/positions/${id}/resume`, { method: 'POST' }),
     reopen: (id: string) =>
       request<Position>(`/positions/${id}/resume`, { method: 'POST' }),
+    resetPnl: (id: string) =>
+      request<Position>(`/positions/${id}/reset-pnl`, { method: 'POST' }),
     delete: (id: string) =>
       request<void>(`/positions/${id}`, { method: 'DELETE' }),
   },

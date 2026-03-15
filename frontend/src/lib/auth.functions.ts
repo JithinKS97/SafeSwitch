@@ -9,18 +9,22 @@ function getTokenFromCookie(cookieHeader: string | null): string | null {
   return match ? decodeURIComponent(match[1]) : null
 }
 
-export const getSession = createServerFn({ method: 'GET' }).handler(async (token?: string | null) => {
-    const request = getRequest()
-    const cookie = request.headers.get('Cookie')
-    const tokenToUse = token ?? getTokenFromCookie(cookie)
-    const headers: Record<string, string> = cookie ? { Cookie: cookie } : {}
-    if (tokenToUse) headers['Authorization'] = `Bearer ${tokenToUse}`
-    console.log('[Auth] getSession server:', { hasCookie: !!cookie, hasToken: !!token, API_BASE })
-    const res = await fetch(`${API_BASE}/api/auth/get-session`, {
-      headers,
-      credentials: 'include',
-    })
-    const data = res.ok ? await res.json() : null
-    console.log('[Auth] getSession result:', { ok: res.ok, hasUser: !!data?.user })
-    return data
+export const getCookieToken = createServerFn({ method: 'GET' }).handler(async () => {
+  const request = getRequest()
+  const cookie = request.headers.get('Cookie')
+  return getTokenFromCookie(cookie)
+})
+
+export const getSession = createServerFn({ method: 'GET' }).handler(async () => {
+  const request = getRequest()
+  const cookie = request.headers.get('Cookie')
+  const token = getTokenFromCookie(cookie)
+  const headers: Record<string, string> = cookie ? { Cookie: cookie } : {}
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const res = await fetch(`${API_BASE}/api/auth/get-session`, {
+    headers,
+    credentials: 'include',
   })
+  const data = res.ok ? await res.json() : null
+  return data
+})

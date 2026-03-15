@@ -40,6 +40,12 @@ export class PositionsController {
     return this.service.activate(id, userId);
   }
 
+  @Post(':id/reset-pnl')
+  @HttpCode(HttpStatus.OK)
+  resetPnl(@Param('id') id: string, @UserId() userId: string) {
+    return this.service.resetPnl(id, userId);
+  }
+
   @Patch(':id/instruction')
   updateInstruction(
     @Param('id') id: string,

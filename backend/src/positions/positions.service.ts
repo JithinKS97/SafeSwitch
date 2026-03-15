@@ -153,8 +153,13 @@ export class PositionsService {
     return this.resume(id, userId);
   }
 
+  async resetPnl(id: string, userId: string) {
+    await this.findById(id, userId); // ownership check
+    return this.repo.resetPnl(id);
+  }
+
   async updateInstruction(id: string, instruction: string, userId: string) {
-    const position = await this.findById(id, userId);
+    await this.findById(id, userId); // ownership check
     return this.repo.updateInstruction(id, instruction.trim());
   }
 

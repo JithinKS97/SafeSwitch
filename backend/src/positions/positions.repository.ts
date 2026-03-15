@@ -229,4 +229,8 @@ export class PositionsRepository {
   updateConfidence(id: string, confidence: number, pnl: number) {
     return this.prisma.position.update({ where: { id }, data: { confidence, pnl } });
   }
+
+  resetPnl(id: string) {
+    return this.prisma.position.update({ where: { id }, data: { pnl: 0 } });
+  }
 }

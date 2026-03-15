@@ -166,6 +166,7 @@ export function PositionRow({
   useEffect(() => setMounted(true), [])
   const invalidate = () => qc.invalidateQueries({ queryKey: ['positions'] })
 
+  const resetPnl = useMutation({ mutationFn: () => api.positions.resetPnl(position.id), onSuccess: invalidate })
   const pause = useMutation({ mutationFn: () => api.positions.pause(position.id), onSuccess: invalidate })
   const resume = useMutation({ mutationFn: () => api.positions.resume(position.id), onSuccess: invalidate })
   const switchMode = useMutation({
@@ -311,6 +312,15 @@ export function PositionRow({
             {hasJournal && (
               <Btn onClick={() => setModalOpen(true)} variant="ghost">
                 Journal
+              </Btn>
+            )}
+            {position.pnl !== 0 && (
+              <Btn
+                onClick={() => window.confirm('Reset PnL to 0? Journal and confidence are kept.') && resetPnl.mutate()}
+                disabled={resetPnl.isPending}
+                variant="ghost"
+              >
+                {resetPnl.isPending ? '…' : 'Reset PnL'}
               </Btn>
             )}
             {(isWatching || isOpen) && (
