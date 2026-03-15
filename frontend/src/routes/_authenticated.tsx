@@ -6,9 +6,17 @@ import { getStoredToken } from '../lib/auth-client'
 
 export const Route = createFileRoute('/_authenticated')({
   beforeLoad: async ({ location }) => {
-    const token = getStoredToken()
-    const session = await getSession(token)
-    console.log('[Auth] _authenticated beforeLoad:', { hasSession: !!session, hasUser: !!session?.user })
+    // Client-side navigation: check localStorage directly (avoids server function round-trip that can fail in production)
+    if (typeof window !== 'undefined') {
+      const token = getStoredToken()
+      if (!token) {
+        throw redirect({ to: '/sign-in', search: { redirect: location.pathname || '/' } })
+      }
+      return
+    }
+    // SSR (initial page load): validate session via server function using request cookies
+    const session = await getSession()
+    console.log('[Auth] _authenticated beforeLoad (SSR):', { hasSession: !!session, hasUser: !!session?.user })
     if (!session?.user) {
       const from = location.pathname || '/'
       throw redirect({ to: '/sign-in', search: { redirect: from } })
