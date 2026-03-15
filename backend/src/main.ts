@@ -10,7 +10,11 @@ async function bootstrap() {
   const expressApp = app.getHttpAdapter().getInstance();
 
   // CORS must run first for cross-origin requests from frontend
-  const allowedOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    ...(process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()) : []),
+  ];
   expressApp.use((req, res, next) => {
     const origin = req.get('origin');
     if (origin && allowedOrigins.includes(origin)) {
@@ -31,7 +35,7 @@ async function bootstrap() {
 
   app.useGlobalFilters(new HttpExceptionFilter());
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: allowedOrigins,
     credentials: true,
   });
 
