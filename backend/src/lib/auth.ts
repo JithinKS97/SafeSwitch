@@ -1,5 +1,5 @@
 import { betterAuth } from 'better-auth';
-import { emailOTP } from 'better-auth/plugins';
+import { bearer, emailOTP } from 'better-auth/plugins';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -38,6 +38,7 @@ export const auth = betterAuth({
     enabled: false,
   },
   plugins: [
+    bearer(),
     emailOTP({
       otpLength: 6,
       expiresIn: 300,
