@@ -1,0 +1,53 @@
+---
+description: TanStack Start frontend conventions for SafeSwitch
+globs: frontend/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend — TanStack Start
+
+## Project Facts
+
+- Framework: TanStack Start (React 19, SSR)
+- Routing: TanStack Router (file-based, `src/routes/`)
+- Data fetching: TanStack Query
+- Styling: Tailwind CSS v4
+- Components: shadcn/ui
+- Icons: lucide-react
+- Linter/Formatter: Biome
+- Package manager: pnpm
+
+## Route Conventions
+
+- Routes live in `src/routes/` as file-based routes
+- Nested routes use folder structure: `src/routes/plans/$planId.tsx`
+- Index routes: `src/routes/plans/index.tsx`
+
+```tsx
+// ✅ GOOD
+export const Route = createFileRoute('/plans/$planId')({
+  component: PlanDetail,
+})
+
+// ❌ BAD — don't use react-router or next/link
+```
+
+## Data Fetching
+
+- Use TanStack Query for all server state
+- Define query options alongside the route or in `src/lib/queries/`
+- Prefer `useSuspenseQuery` inside routes that use `loader`
+
+## API Client
+
+- All backend calls go through `src/lib/api.ts`
+- Backend base URL from env: `VITE_API_URL`
+
+## Key Screens to Build
+
+| Route | Purpose |
+|---|---|
+| `/` | Plans list + New Plan button |
+| `/plans/new` | Risk appetite selector |
+| `/plans/$planId` | Plan detail — suggestions, select pairs |
+| `/positions/$positionId` | Confidence bar, Paper/Live toggle |

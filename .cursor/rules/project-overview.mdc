@@ -1,0 +1,65 @@
+---
+description: SafeSwitch project vision, architecture, and core trading cycle
+alwaysApply: true
+---
+
+# SafeSwitch
+
+An AI-powered crypto trading platform where autonomous agents practice on paper before trading with real money.
+
+## Core Flow
+
+1. User submits risk appetite (Low / Medium / High)
+2. Discovery Agent returns suggested trading pairs (ephemeral — never stored)
+3. User selects pairs → each becomes an inactive **Position** in the DB
+4. User activates a Position when ready → paper trading begins
+5. Confidence score builds as the agent paper trades
+6. User switches to live trading when confidence is high enough
+7. Position completes when profit target is hit, or user stops it
+8. User can request fresh suggestions at any time (market conditions change)
+
+## Key Design Decisions
+
+- **Suggestions are ephemeral** — returned by the API, never stored. Market context changes, so old suggestions have no value.
+- **Position is the core object** — everything meaningful (confidence, P&L, trades) lives on a Position.
+- **No TradingPlan layer** — the user owns a flat list of positions. Simple, like a trading terminal.
+- **Paper first, always** — a position always starts in PAPER mode. The user manually switches to LIVE.
+
+## Data Model
+
+```
+Position
+├── pair           (e.g. BTC/USDT)
+├── direction      (LONG | SHORT)
+├── riskAppetite   (LOW | MEDIUM | HIGH)
+├── status         (INACTIVE | ACTIVE | COMPLETED | STOPPED)
+├── mode           (PAPER | LIVE)
+├── confidence     (0–100)
+├── pnl
+└── trades[]
+
+Trade
+├── positionId
+├── side           (BUY | SELL)
+├── price, quantity, pnl
+└── mode           (PAPER | LIVE)
+```
+
+## Architecture
+
+| Layer | Technology |
+|---|---|
+| Frontend | TanStack Start + TanStack Query + Tailwind v4 |
+| Backend | NestJS + Prisma + PostgreSQL |
+| Agent loop | BullMQ + Redis (to be added) |
+| Market data | Binance API (to be added) |
+
+## Monorepo Layout
+
+```
+safeswitch/
+├── frontend/     ← TanStack Start web app
+├── backend/      ← NestJS API server
+├── compose.yml   ← Postgres (+ Redis later)
+└── justfile      ← dev commands
+```

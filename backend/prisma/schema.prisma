@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Position {
+  id           String         @id @default(uuid())
+  pair         String
+  direction    TradeDirection
+  riskAppetite RiskAppetite
+  status       PositionStatus @default(INACTIVE)
+  mode         TradingMode    @default(PAPER)
+  confidence   Float          @default(0)
+  pnl          Float          @default(0)
+  entryPrice   Float?
+  currentPrice Float?
+  closeReason  CloseReason?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  activatedAt  DateTime?
+  closedAt     DateTime?
+
+  trades       Trade[]
+
+  @@map("positions")
+}
+
+model Trade {
+  id         String      @id @default(uuid())
+  positionId String
+  side       TradeSide
+  quantity   Float
+  price      Float
+  mode       TradingMode
+  pnl        Float?
+  openedAt   DateTime    @default(now())
+  closedAt   DateTime?
+
+  position   Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
+  @@map("trades")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum RiskAppetite {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TradeDirection {
+  LONG
+  SHORT
+}
+
+enum TradingMode {
+  PAPER
+  LIVE
+}
+
+enum PositionStatus {
+  INACTIVE    // added, not yet trading
+  ACTIVE      // paper or live trading in progress
+  COMPLETED   // profit target hit, closed cleanly
+  STOPPED     // manually stopped or emergency exit
+}
+
+enum TradeSide {
+  BUY
+  SELL
+}
+
+enum CloseReason {
+  PROFIT_TARGET   // pnl target reached
+  DRAWDOWN_LIMIT  // loss exceeded risk threshold
+  MANUAL          // user stopped it
+}

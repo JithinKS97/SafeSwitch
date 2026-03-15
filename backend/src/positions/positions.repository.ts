@@ -1,0 +1,68 @@
+import { Injectable } from '@nestjs/common';
+import { PositionStatus, TradingMode, CloseReason } from '../common/types/enums';
+import { PrismaService } from '../common/prisma/prisma.service';
+import { CreatePositionDto } from './dto/create-position.dto';
+
+@Injectable()
+export class PositionsRepository {
+  constructor(private readonly prisma: PrismaService) {}
+
+  findAll() {
+    return this.prisma.position.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { trades: { orderBy: { openedAt: 'desc' }, take: 5 } },
+    });
+  }
+
+  findById(id: string) {
+    return this.prisma.position.findUnique({
+      where: { id },
+      include: { trades: { orderBy: { openedAt: 'desc' } } },
+    });
+  }
+
+  create(dto: CreatePositionDto) {
+    return this.prisma.position.create({
+      data: {
+        pair: dto.pair,
+        direction: dto.direction,
+        riskAppetite: dto.riskAppetite,
+      },
+    });
+  }
+
+  activate(id: string) {
+    return this.prisma.position.update({
+      where: { id },
+      data: {
+        status: PositionStatus.ACTIVE,
+        activatedAt: new Date(),
+      },
+    });
+  }
+
+  switchMode(id: string, mode: TradingMode) {
+    return this.prisma.position.update({
+      where: { id },
+      data: { mode },
+    });
+  }
+
+  stop(id: string, reason: CloseReason) {
+    return this.prisma.position.update({
+      where: { id },
+      data: {
+        status: PositionStatus.STOPPED,
+        closeReason: reason,
+        closedAt: new Date(),
+      },
+    });
+  }
+
+  updateConfidence(id: string, confidence: number, pnl: number) {
+    return this.prisma.position.update({
+      where: { id },
+      data: { confidence, pnl },
+    });
+  }
+}

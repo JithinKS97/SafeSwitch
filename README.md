@@ -6,19 +6,23 @@ An AI-powered crypto trading platform where autonomous agents practice on paper 
 
 Most algo traders lose money by going live too fast. SafeSwitch enforces a discipline: the agent must *earn* its way into real trading by proving itself in simulation first.
 
-**The cycle:**
-1. Agent scans the market and identifies opportunities based on your risk appetite
-2. Agent paper trades the selected pair, building a confidence score
-3. Once confidence is high enough, you switch to live trading
-4. When the target profit is hit, the agent stops — and looks for the next opportunity
+**The flow:**
+1. Submit your risk appetite — the agent suggests trading pairs
+2. Pick the pairs you want to watch — they're added as inactive positions
+3. Activate a position when ready — paper trading begins
+4. Watch the confidence score build in real time
+5. Switch to live trading when you're confident
+6. Position closes when the profit target is hit
+
+Suggestions are ephemeral — request fresh ones any time, since market conditions change.
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
-| Mobile app | Expo (React Native) + TypeScript |
+| Frontend | TanStack Start (React 19) + Tailwind CSS v4 |
 | Backend | NestJS + TypeScript |
-| Database | PostgreSQL (via Prisma) |
+| Database | PostgreSQL + Prisma |
 | Agent loop | BullMQ + Redis |
 | Market data | Binance API |
 
@@ -26,7 +30,7 @@ Most algo traders lose money by going live too fast. SafeSwitch enforces a disci
 
 ```
 safeswitch/
-├── app/          # Expo React Native mobile app
+├── frontend/     # TanStack Start web app
 ├── backend/      # NestJS API server
 ├── compose.yml   # Docker services (Postgres, Redis)
 └── justfile      # Dev commands
@@ -34,23 +38,34 @@ safeswitch/
 
 ## Getting Started
 
-**Prerequisites:** Docker Desktop, Node.js, [just](https://github.com/casey/just)
+**Prerequisites:** Docker Desktop, Node.js, pnpm, [just](https://github.com/casey/just)
 
 ```bash
-# Start infrastructure (Postgres + Redis)
-just db-up
+# Install dependencies
+cd frontend && pnpm install
+cd ../backend && pnpm install
 
-# Start the backend
+# Start Postgres and write .env
+just db-up
+just env
+
+# Run database migrations
+cd backend && npx prisma migrate dev
+
+# Start backend (port 3001)
 just server
 
-# Start the mobile app
-cd app && bun start
+# Start frontend (port 3000)
+just frontend
 ```
 
 ## Key Commands
 
 ```bash
-just dev       # start db + backend
-just db-down   # stop containers
-just db-reset  # wipe database and start fresh
+just db-up      # start Postgres
+just server     # start NestJS backend
+just frontend   # start TanStack Start frontend
+just db-down    # stop containers
+just db-reset   # wipe database and start fresh
+just env        # write backend/.env
 ```

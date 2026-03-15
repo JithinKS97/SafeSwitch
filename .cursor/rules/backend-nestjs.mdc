@@ -1,0 +1,65 @@
+---
+description: NestJS backend conventions for SafeSwitch
+globs: backend/**/*.ts
+alwaysApply: false
+---
+
+# Backend — NestJS
+
+## Project Facts
+
+- Framework: NestJS 11
+- ORM: Prisma (to be added)
+- Database: PostgreSQL
+- Job queue: BullMQ + Redis (to be added)
+- Package manager: pnpm
+
+## Module Structure
+
+Each feature is a NestJS module with controller, service, and repository:
+
+```
+src/
+├── plans/
+│   ├── plans.module.ts
+│   ├── plans.controller.ts   ← HTTP handlers only, no logic
+│   ├── plans.service.ts      ← business logic
+│   └── plans.repository.ts  ← Prisma queries
+├── suggestions/
+├── positions/
+├── agents/
+└── common/
+    ├── prisma/               ← PrismaService
+    └── filters/              ← global exception filter
+```
+
+## Controller Rules
+
+- Thin handlers only — parse input, call service, return result
+- Use `@HttpCode` explicitly for non-200 responses
+- Use class-validator DTOs for all request bodies
+
+## Service Rules
+
+- All business logic lives in the service
+- Services call repositories, not Prisma directly
+- Throw `NotFoundException`, `BadRequestException` etc. from `@nestjs/common`
+
+## Response Format
+
+Always return consistent JSON:
+```typescript
+// success
+{ data: T }
+
+// error (handled by global filter)
+{ error: string, statusCode: number }
+```
+
+## Domain Modules to Build
+
+- `plans` — TradingPlan CRUD
+- `suggestions` — Suggestion generation (dummy → LLM later)
+- `positions` — Position lifecycle, confidence updates
+- `trades` — Individual trade records
+- `agents` — Discovery + trading agent orchestration
