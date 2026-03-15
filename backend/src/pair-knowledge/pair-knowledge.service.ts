@@ -2,6 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import {
   PAIR_KNOWLEDGE_ENGINE,
+  type JournalEntry,
   type PairKnowledgeEngine,
   type PairJournalData,
 } from './pair-knowledge.interface';
@@ -41,6 +42,30 @@ export class PairKnowledgeEngineService implements PairKnowledgeEngine {
     if (action === 'EXIT' && outcome) {
       await this.updateConfidence(journal.id);
     }
+    await this.updateSummarisedKnowledge(journal.id, pair);
+  }
+
+  async addObservation(
+    userId: string,
+    pair: string,
+    cycleNum: number,
+    price: number,
+    reasoning?: string,
+  ): Promise<void> {
+    const journal = await this.prisma.pairJournal.upsert({
+      where: { userId_pair: { userId, pair } },
+      create: { userId, pair },
+      update: {},
+    });
+    await this.prisma.pairJournalEntry.create({
+      data: {
+        pairJournalId: journal.id,
+        cycleNum,
+        action: 'OBSERVE',
+        reasoning: reasoning ?? `Price: ${price}`,
+        outcome: { price },
+      },
+    });
     await this.updateSummarisedKnowledge(journal.id, pair);
   }
 
@@ -130,14 +155,23 @@ export class PairKnowledgeEngineService implements PairKnowledgeEngine {
       confidence: row.confidence,
       summarisedKnowledge: row.summarisedKnowledge ?? '',
       updatedAt: row.updatedAt,
-      entries: row.entries.map((e) => ({
-        id: e.id,
-        cycleNum: e.cycleNum,
-        action: e.action as 'ENTER' | 'EXIT',
-        reasoning: e.reasoning,
-        outcome: e.outcome as { pnl: number; closeReason: string } | null,
-        createdAt: e.createdAt,
-      })),
+      entries: row.entries.map((e) => {
+        const o = e.outcome as { pnl?: number; closeReason?: string; price?: number } | null;
+        const outcome: JournalEntry['outcome'] =
+          o?.pnl != null && o?.closeReason != null
+            ? { pnl: o.pnl, closeReason: o.closeReason }
+            : o?.price != null
+              ? { price: o.price }
+              : null;
+        return {
+          id: e.id,
+          cycleNum: e.cycleNum,
+          action: e.action as 'ENTER' | 'EXIT' | 'OBSERVE',
+          reasoning: e.reasoning,
+          outcome,
+          createdAt: e.createdAt,
+        };
+      }),
     };
   }
 }

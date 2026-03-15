@@ -103,7 +103,7 @@ function PairJournalModal({
 
           <div>
             <p className="mb-3 text-xs font-medium uppercase tracking-widest text-zinc-400">
-              Position changes
+              Journal entries (price check every interval)
             </p>
             <ul className="space-y-3">
               {pairJournal.entries.map((entry) => (
@@ -113,18 +113,29 @@ function PairJournalModal({
                 >
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <span
-                      className={`rounded px-2 py-0.5 text-xs font-medium ${entry.action === 'ENTER' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'}`}
+                      className={`rounded px-2 py-0.5 text-xs font-medium ${
+                        entry.action === 'ENTER'
+                          ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                          : entry.action === 'OBSERVE'
+                            ? 'bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300'
+                            : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
+                      }`}
                     >
                       {entry.action}
                     </span>
                     <span className="text-xs text-zinc-400">Cycle #{entry.cycleNum}</span>
                     <span className="text-xs text-zinc-400">{formatDate(entry.createdAt)}</span>
-                    {entry.outcome && (
+                    {entry.outcome?.pnl != null && entry.outcome?.closeReason != null && (
                       <span
                         className={`text-xs font-medium ${entry.outcome.pnl >= 0 ? 'text-emerald-600' : 'text-red-500'}`}
                       >
                         {entry.outcome.pnl >= 0 ? '+' : ''}
                         {entry.outcome.pnl.toFixed(2)}% ({entry.outcome.closeReason})
+                      </span>
+                    )}
+                    {entry.outcome?.price != null && (
+                      <span className="text-xs font-medium text-sky-600 dark:text-sky-400">
+                        Price: {entry.outcome.price.toLocaleString()}
                       </span>
                     )}
                   </div>

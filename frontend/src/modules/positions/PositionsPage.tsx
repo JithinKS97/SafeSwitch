@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -6,7 +6,7 @@ import { api } from '../shared/api'
 import { PositionRow } from './components/PositionRow'
 import { BinanceKeysModal } from './components/BinanceKeysModal'
 import { EditDisplaySaveModal } from '@/components/ui/edit-display-save-modal'
-import type { PairJournal, SchedulerStatus } from '../shared/api'
+import type { SchedulerStatus } from '../shared/api'
 
 function formatTimeUntil(iso: string): string {
   const ms = new Date(iso).getTime() - Date.now()
@@ -25,16 +25,18 @@ export function PositionsPage() {
     refetchInterval: 5000,
   })
 
-  const { data: pairJournals = [] } = useQuery({
-    queryKey: ['pairJournals'],
-    queryFn: api.pairJournals.list,
-    refetchInterval: 10_000,
-  })
-
   const { data: status, isLoading: statusLoading } = useQuery({
     queryKey: ['agent', 'status'],
     queryFn: api.agent.status,
     refetchInterval: 30_000,
+  })
+
+  const { data: pairJournals = [] } = useQuery({
+    queryKey: ['pairJournals'],
+    queryFn: api.pairJournals.list,
+    refetchInterval: status?.intervalMinutes
+      ? status.intervalMinutes * 60 * 1000
+      : 60_000,
   })
 
   const { data: instructionData } = useQuery({

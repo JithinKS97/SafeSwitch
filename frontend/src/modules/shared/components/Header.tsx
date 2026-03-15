@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { authClient } from '../../../lib/auth-client'
+import { authClient, setStoredToken } from '../../../lib/auth-client'
 
 export default function Header() {
   const { data: session, isPending } = authClient.useSession()
@@ -27,7 +27,10 @@ export default function Header() {
               {session.user.email}
             </span>
             <button
-              onClick={() => authClient.signOut({ callbackURL: '/sign-in' })}
+              onClick={() => {
+                setStoredToken(null)
+                window.location.href = '/sign-in'
+              }}
               className="rounded border border-zinc-200 dark:border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             >
               Sign out

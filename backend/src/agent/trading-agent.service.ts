@@ -210,7 +210,25 @@ export class TradingAgentService {
       );
     }
 
-    // 9. Save journal entry
+    // 9. Add OBSERVE entry for each pair that had no ENTER/EXIT this cycle (price check every interval)
+    const pairsWithAction = new Set([
+      ...decisions.enter.map((e) => {
+        const pos = watchingPositions.find((p) => p.id === e.id);
+        return pos?.pair;
+      }).filter(Boolean),
+      ...decisions.close.map((c) => {
+        const pos = openPositions.find((p) => p.id === c.id);
+        return pos?.pair;
+      }).filter(Boolean),
+    ]);
+    for (const pair of allPairs) {
+      if (!pairsWithAction.has(pair)) {
+        const price = priceMap[pair] ?? 0;
+        await this.pairKnowledge.addObservation(userId, pair, cycleNum, price);
+      }
+    }
+
+    // 10. Save journal entry
     const journalDecisions: JournalDecisions = {
       opened: decisions.enter.map((e) => {
         const pos = watchingPositions.find((p) => p.id === e.id);
@@ -250,7 +268,7 @@ export class TradingAgentService {
       instruction?: string;
       mode?: string;
     }>,
-    pairJournals: Array<{ pair: string; confidence: number; summarisedKnowledge: string; entries: Array<{ cycleNum: number; action: string; reasoning: string; outcome: { pnl: number; closeReason: string } | null; createdAt: Date }> }>,
+    pairJournals: Array<{ pair: string; confidence: number; summarisedKnowledge: string; entries: Array<{ cycleNum: number; action: string; reasoning: string; outcome: { pnl?: number; closeReason?: string; price?: number } | null; createdAt: Date }> }>,
     priceMap: Record<string, number>,
     candlesMap: Record<string, Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>>,
   ): string {

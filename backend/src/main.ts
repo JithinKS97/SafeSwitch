@@ -29,6 +29,17 @@ async function bootstrap() {
     next();
   });
 
+  // Accept Bearer token and set as cookie so Better Auth validates it (for localStorage-based auth)
+  expressApp.use((req, res, next) => {
+    const auth = req.get('Authorization');
+    const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null;
+    if (token && !req.headers.cookie?.includes('better-auth')) {
+      const existing = req.headers.cookie ?? '';
+      req.headers.cookie = existing ? `${existing}; better-auth.session_token=${token}` : `better-auth.session_token=${token}`;
+    }
+    next();
+  });
+
   // Debug: log auth requests
   expressApp.use((req, res, next) => {
     if (req.path?.startsWith('/api/auth')) {

@@ -1,5 +1,11 @@
-// Hit backend directly; Vite proxy returns 404 with TanStack Start + Nitro. Backend has CORS for localhost:3000.
+import { getStoredToken } from '#/lib/auth-client'
+
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
+
+function getAuthHeaders(): Record<string, string> {
+  const token = getStoredToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 export type RiskAppetite = 'LOW' | 'MEDIUM' | 'HIGH'
 export type TradeDirection = 'LONG' | 'SHORT'
@@ -55,6 +61,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+      ...(options?.headers as Record<string, string>),
     },
     ...options,
   })
@@ -160,7 +168,7 @@ export type PairJournalEntry = {
   cycleNum: number
   action: string
   reasoning: string
-  outcome: { pnl: number; closeReason: string } | null
+  outcome: { pnl?: number; closeReason?: string; price?: number } | null
   createdAt: string
 }
 

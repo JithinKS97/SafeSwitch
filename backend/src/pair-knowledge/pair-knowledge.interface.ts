@@ -8,9 +8,9 @@
 export type JournalEntry = {
   id: string
   cycleNum: number
-  action: 'ENTER' | 'EXIT'
+  action: 'ENTER' | 'EXIT' | 'OBSERVE'
   reasoning: string
-  outcome: { pnl: number; closeReason: string } | null
+  outcome: { pnl: number; closeReason: string } | { price: number } | null
   createdAt: Date
 }
 
@@ -37,6 +37,18 @@ export interface PairKnowledgeEngine {
     action: 'ENTER' | 'EXIT',
     reasoning: string,
     outcome?: { pnl: number; closeReason: string },
+  ): Promise<void>
+
+  /**
+   * Record a price observation for a pair (no position change).
+   * Called every interval for each pair.
+   */
+  addObservation(
+    userId: string,
+    pair: string,
+    cycleNum: number,
+    price: number,
+    reasoning?: string,
   ): Promise<void>
 
   /**

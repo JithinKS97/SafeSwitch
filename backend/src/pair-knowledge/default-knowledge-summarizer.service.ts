@@ -19,7 +19,12 @@ export class DefaultKnowledgeSummarizerService implements KnowledgeSummarizer {
       const entriesText = entries
         .map((e) => {
           const line = `${e.action}: ${e.reasoning}`;
-          return e.outcome ? `${line} → ${e.outcome.pnl >= 0 ? '+' : ''}${e.outcome.pnl.toFixed(2)}% (${e.outcome.closeReason})` : line;
+          const o = e.outcome as { pnl?: number; closeReason?: string; price?: number } | null;
+          if (o?.pnl != null && o?.closeReason != null) {
+            return `${line} → ${o.pnl >= 0 ? '+' : ''}${o.pnl.toFixed(2)}% (${o.closeReason})`;
+          }
+          if (o?.price != null) return `${line} [price: ${o.price}]`;
+          return line;
         })
         .join('\n');
 
