@@ -126,7 +126,7 @@ export class PairKnowledgeEngineService implements PairKnowledgeEngine {
   async findForUser(userId: string): Promise<PairJournalData[]> {
     const rows = await this.prisma.pairJournal.findMany({
       where: { userId },
-      include: { entries: { orderBy: { createdAt: 'desc' } } },
+      include: { entries: { orderBy: { createdAt: 'desc' }, take: 10 } },
       orderBy: { updatedAt: 'desc' },
     });
     return rows.map(this.toPairJournalData);
@@ -135,7 +135,7 @@ export class PairKnowledgeEngineService implements PairKnowledgeEngine {
   async findByPair(userId: string, pair: string): Promise<PairJournalData | null> {
     const row = await this.prisma.pairJournal.findUnique({
       where: { userId_pair: { userId, pair } },
-      include: { entries: { orderBy: { createdAt: 'desc' } } },
+      include: { entries: { orderBy: { createdAt: 'desc' }, take: 10 } },
     });
     return row ? this.toPairJournalData(row) : null;
   }
@@ -143,7 +143,7 @@ export class PairKnowledgeEngineService implements PairKnowledgeEngine {
   async findForPairs(userId: string, pairs: string[]): Promise<PairJournalData[]> {
     const rows = await this.prisma.pairJournal.findMany({
       where: { userId, pair: { in: pairs } },
-      include: { entries: { orderBy: { createdAt: 'desc' } } },
+      include: { entries: { orderBy: { createdAt: 'desc' }, take: 10 } },
     });
     return rows.map(this.toPairJournalData);
   }
