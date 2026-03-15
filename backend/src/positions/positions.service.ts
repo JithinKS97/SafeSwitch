@@ -9,6 +9,7 @@ import {
 import { PositionStatus, TradingMode, CloseReason } from '../common/types/enums';
 import { PositionsRepository } from './positions.repository';
 import { BinanceService } from '../binance/binance.service';
+import { PrismaService } from '../common/prisma/prisma.service';
 import { ExecutionService } from '../execution/execution.service';
 import { CreatePositionDto } from './dto/create-position.dto';
 
@@ -17,6 +18,7 @@ export class PositionsService {
   constructor(
     private readonly repo: PositionsRepository,
     private readonly binance: BinanceService,
+    private readonly prisma: PrismaService,
     @Inject(forwardRef(() => ExecutionService))
     private readonly execution: ExecutionService,
   ) {}
@@ -158,15 +160,21 @@ export class PositionsService {
     return this.repo.resetPnl(id);
   }
 
+  async updateAmount(id: string, amount: number, userId: string) {
+    await this.findById(id, userId); // ownership check
+    return this.repo.updateAmount(id, amount);
+  }
+
   async updateInstruction(id: string, instruction: string, userId: string) {
     await this.findById(id, userId); // ownership check
     return this.repo.updateInstruction(id, instruction.trim());
   }
 
-  async delete(id: string, userId: string) {
-    await this.findById(id, userId); // ownership check
+  async delete(id: string, userId: string, wipeHistory = false) {
+    const position = await this.findById(id, userId);
     await this.repo.delete(id);
-    // Pair journal is retained — it holds the agent's learned knowledge for this pair
-    // and will be picked up automatically if the pair is re-added later.
+    if (wipeHistory) {
+      await this.prisma.pairJournal.deleteMany({ where: { userId, pair: position.pair } });
+    }
   }
 }

@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { TradingMode } from '../common/types/enums';
 import { PositionsService } from './positions.service';
@@ -44,6 +45,15 @@ export class PositionsController {
   @HttpCode(HttpStatus.OK)
   resetPnl(@Param('id') id: string, @UserId() userId: string) {
     return this.service.resetPnl(id, userId);
+  }
+
+  @Patch(':id/amount')
+  updateAmount(
+    @Param('id') id: string,
+    @Body('amount') amount: number,
+    @UserId() userId: string,
+  ) {
+    return this.service.updateAmount(id, amount, userId);
   }
 
   @Patch(':id/instruction')
@@ -91,7 +101,11 @@ export class PositionsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  delete(@Param('id') id: string, @UserId() userId: string) {
-    return this.service.delete(id, userId);
+  delete(
+    @Param('id') id: string,
+    @Query('wipeHistory') wipeHistory: string,
+    @UserId() userId: string,
+  ) {
+    return this.service.delete(id, userId, wipeHistory === 'true');
   }
 }

@@ -113,7 +113,7 @@ export class PositionsRepository {
         pair: dto.pair,
         direction: dto.direction,
         riskAppetite: dto.riskAppetite,
-        amount: dto.amount,
+        amount: dto.amount ?? 0,
       },
     });
   }
@@ -232,5 +232,9 @@ export class PositionsRepository {
 
   resetPnl(id: string) {
     return this.prisma.position.update({ where: { id }, data: { pnl: 0 } });
+  }
+
+  updateAmount(id: string, amount: number) {
+    return this.prisma.position.update({ where: { id }, data: { amount } });
   }
 }
