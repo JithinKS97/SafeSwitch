@@ -17,11 +17,12 @@ export class IndicatorsService {
     const { macdLine, macdSignal, macdHistogram } = this.macd(closes);
     const { upper: bbUpper, middle: bbMiddle, lower: bbLower, bbPosition } = this.bollingerBands(closes);
     const atr14 = this.atr(candles, 14);
+    const adx14 = this.adx(candles, 14);
+    const adxTrend: 'trending' | 'ranging' = adx14 >= 25 ? 'trending' : 'ranging';
     const volumeRatio = this.volumeRatio(candles);
 
-    const { slope: trendSlope, r2: trendR2, predictedNext } = this.linearRegression(closes, 20);
-    const supportLevel = Math.min(...candles.slice(-20).map((c) => c.low));
-    const resistanceLevel = Math.max(...candles.slice(-20).map((c) => c.high));
+    const { slope: trendSlope, r2: trendR2, predictedNext } = this.linearRegression(closes, 50);
+    const { support: supportLevel, resistance: resistanceLevel } = this.swingLevels(candles, 5);
     const volatilityPct = price > 0 ? (atr14 / price) * 100 : 0;
 
     return {
@@ -40,6 +41,8 @@ export class IndicatorsService {
         bbLower: +bbLower.toFixed(4),
         bbPosition: +bbPosition.toFixed(3),
         atr14: +atr14.toFixed(4),
+        adx14: +adx14.toFixed(2),
+        adxTrend,
         volumeRatio: +volumeRatio.toFixed(2),
       },
       model: {
@@ -53,17 +56,39 @@ export class IndicatorsService {
     };
   }
 
+  /** Enrich a 1h worksheet with 4h context computed from 4h candles. */
+  enrich4h(ws: PairWorksheet, candles4h: Candle[]): PairWorksheet {
+    const closes4h = candles4h.map((c) => c.close);
+    const ema20_4h = this.ema(closes4h, 20);
+    const ema50_4h = this.ema(closes4h, 50);
+    const trend4h: 'bullish' | 'bearish' | 'neutral' =
+      ema20_4h > ema50_4h * 1.001 ? 'bullish' : ema20_4h < ema50_4h * 0.999 ? 'bearish' : 'neutral';
+    const adx4h = this.adx(candles4h, 14);
+
+    return {
+      ...ws,
+      context: {
+        trend4h,
+        adx4h: +adx4h.toFixed(2),
+        ema20_4h: +ema20_4h.toFixed(4),
+        ema50_4h: +ema50_4h.toFixed(4),
+      },
+    };
+  }
+
   /** Extract compact snapshot from a worksheet for attaching to a journal entry. */
   snapshot(ws: PairWorksheet): EntryMathSnapshot {
     return {
       price: ws.price,
       rsi14: ws.indicators.rsi14,
       emaTrend: ws.indicators.emaTrend,
+      adxTrend: ws.indicators.adxTrend,
       macdHistogram: ws.indicators.macdHistogram,
       bbPosition: ws.indicators.bbPosition,
       trendSlope: ws.model.trendSlope,
       trendR2: ws.model.trendR2,
       volatilityPct: ws.model.volatilityPct,
+      trend4h: ws.context?.trend4h,
     };
   }
 
@@ -71,16 +96,14 @@ export class IndicatorsService {
 
   private rsi(closes: number[], period = 14): number {
     if (closes.length < period + 1) return 50;
-    const slice = closes.slice(-(period + 1));
-    let gains = 0;
-    let losses = 0;
-    for (let i = 1; i < slice.length; i++) {
-      const diff = slice[i] - slice[i - 1];
-      if (diff > 0) gains += diff;
-      else losses -= diff;
+    // Wilder's smoothed RSI over full series for accuracy
+    const changes = closes.slice(1).map((c, i) => c - closes[i]);
+    let avgGain = changes.slice(0, period).filter((d) => d > 0).reduce((s, d) => s + d, 0) / period;
+    let avgLoss = changes.slice(0, period).filter((d) => d < 0).reduce((s, d) => s - d, 0) / period;
+    for (const d of changes.slice(period)) {
+      avgGain = (avgGain * (period - 1) + Math.max(0, d)) / period;
+      avgLoss = (avgLoss * (period - 1) + Math.max(0, -d)) / period;
     }
-    const avgGain = gains / period;
-    const avgLoss = losses / period;
     if (avgLoss === 0) return 100;
     return 100 - 100 / (1 + avgGain / avgLoss);
   }
@@ -112,10 +135,9 @@ export class IndicatorsService {
 
   private macd(closes: number[]): { macdLine: number; macdSignal: number; macdHistogram: number } {
     const zero = { macdLine: 0, macdSignal: 0, macdHistogram: 0 };
-    if (closes.length < 35) return zero; // need enough data for EMA26 + EMA9 of MACD
-    const ema12 = this.emaArray(closes, 12); // length = closes.length - 11
-    const ema26 = this.emaArray(closes, 26); // length = closes.length - 25
-    // Align to the shorter ema26 series
+    if (closes.length < 35) return zero;
+    const ema12 = this.emaArray(closes, 12);
+    const ema26 = this.emaArray(closes, 26);
     const offset = ema12.length - ema26.length;
     const macdSeries = ema26.map((v, i) => ema12[i + offset] - v);
     const signalSeries = this.emaArray(macdSeries, 9);
@@ -144,14 +166,108 @@ export class IndicatorsService {
     if (candles.length < 2) return 0;
     const trs = candles.slice(1).map((c, i) => {
       const prev = candles[i];
-      return Math.max(
-        c.high - c.low,
-        Math.abs(c.high - prev.close),
-        Math.abs(c.low - prev.close),
-      );
+      return Math.max(c.high - c.low, Math.abs(c.high - prev.close), Math.abs(c.low - prev.close));
     });
-    const recent = trs.slice(-period);
-    return recent.reduce((s, tr) => s + tr, 0) / recent.length;
+    // Wilder's smoothed ATR
+    const slice = trs.slice(-Math.min(trs.length, period * 3));
+    let atr = slice.slice(0, period).reduce((s, tr) => s + tr, 0) / period;
+    for (const tr of slice.slice(period)) {
+      atr = (atr * (period - 1) + tr) / period;
+    }
+    return atr;
+  }
+
+  /**
+   * Wilder's ADX(14) — measures trend strength, not direction.
+   * ADX > 25: trending market. ADX < 20: ranging/choppy.
+   */
+  private adx(candles: Candle[], period = 14): number {
+    if (candles.length < period * 2 + 1) return 15; // default to ranging when insufficient data
+    const slice = candles.slice(-(period * 3 + 1));
+
+    const plusDMs: number[] = [];
+    const minusDMs: number[] = [];
+    const trs: number[] = [];
+
+    for (let i = 1; i < slice.length; i++) {
+      const curr = slice[i];
+      const prev = slice[i - 1];
+      const upMove = curr.high - prev.high;
+      const downMove = prev.low - curr.low;
+      plusDMs.push(upMove > downMove && upMove > 0 ? upMove : 0);
+      minusDMs.push(downMove > upMove && downMove > 0 ? downMove : 0);
+      trs.push(Math.max(curr.high - curr.low, Math.abs(curr.high - prev.close), Math.abs(curr.low - prev.close)));
+    }
+
+    // Wilder's smoothing
+    let smoothTR = trs.slice(0, period).reduce((s, v) => s + v, 0);
+    let smoothPlus = plusDMs.slice(0, period).reduce((s, v) => s + v, 0);
+    let smoothMinus = minusDMs.slice(0, period).reduce((s, v) => s + v, 0);
+
+    const dxValues: number[] = [];
+    for (let i = period; i < trs.length; i++) {
+      smoothTR = smoothTR - smoothTR / period + trs[i];
+      smoothPlus = smoothPlus - smoothPlus / period + plusDMs[i];
+      smoothMinus = smoothMinus - smoothMinus / period + minusDMs[i];
+      const diPlus = smoothTR > 0 ? (smoothPlus / smoothTR) * 100 : 0;
+      const diMinus = smoothTR > 0 ? (smoothMinus / smoothTR) * 100 : 0;
+      const diSum = diPlus + diMinus;
+      dxValues.push(diSum > 0 ? (Math.abs(diPlus - diMinus) / diSum) * 100 : 0);
+    }
+
+    if (dxValues.length < period) return 15;
+    // Wilder's smooth ADX from DX values
+    let adxVal = dxValues.slice(0, period).reduce((s, v) => s + v, 0) / period;
+    for (const dx of dxValues.slice(period)) {
+      adxVal = (adxVal * (period - 1) + dx) / period;
+    }
+    return adxVal;
+  }
+
+  /**
+   * Swing pivot support and resistance.
+   * A swing high is a candle whose high exceeds the N candles on either side.
+   * A swing low is a candle whose low is below the N candles on either side.
+   * Returns the most recent significant swing high (resistance) and swing low (support).
+   * Falls back to 50-candle range min/max if no pivots are found.
+   */
+  private swingLevels(candles: Candle[], n = 5): { support: number; resistance: number } {
+    const price = candles[candles.length - 1]?.close ?? 0;
+    // Only look at last 100 candles (enough history, not too noisy)
+    const slice = candles.slice(-100);
+    const len = slice.length;
+
+    let resistance = 0;
+    let support = Infinity;
+
+    // Walk backwards so we find the most recent pivots first
+    for (let i = len - n - 1; i >= n; i--) {
+      const c = slice[i];
+      // Swing high
+      if (resistance === 0) {
+        const isSwingHigh = slice.slice(i - n, i).every((x) => x.high <= c.high) &&
+          slice.slice(i + 1, i + n + 1).every((x) => x.high <= c.high);
+        if (isSwingHigh && c.high > price * 0.98) {
+          resistance = c.high;
+        }
+      }
+      // Swing low
+      if (support === Infinity) {
+        const isSwingLow = slice.slice(i - n, i).every((x) => x.low >= c.low) &&
+          slice.slice(i + 1, i + n + 1).every((x) => x.low >= c.low);
+        if (isSwingLow && c.low < price * 1.02) {
+          support = c.low;
+        }
+      }
+      if (resistance !== 0 && support !== Infinity) break;
+    }
+
+    // Fallback to range min/max if no pivots found
+    const fallbackCandles = candles.slice(-50);
+    if (resistance === 0) resistance = Math.max(...fallbackCandles.map((c) => c.high));
+    if (support === Infinity) support = Math.min(...fallbackCandles.map((c) => c.low));
+
+    return { support, resistance };
   }
 
   private volumeRatio(candles: Candle[], period = 20): number {
@@ -165,7 +281,7 @@ export class IndicatorsService {
 
   private linearRegression(
     closes: number[],
-    lookback = 20,
+    lookback = 50,
   ): { slope: number; r2: number; predictedNext: number } {
     const values = closes.slice(-lookback);
     const n = values.length;
@@ -174,9 +290,7 @@ export class IndicatorsService {
     const xMean = (n - 1) / 2;
     const yMean = values.reduce((s, v) => s + v, 0) / n;
 
-    let ssXX = 0;
-    let ssXY = 0;
-    let ssYY = 0;
+    let ssXX = 0, ssXY = 0, ssYY = 0;
     for (let i = 0; i < n; i++) {
       const dx = i - xMean;
       const dy = values[i] - yMean;

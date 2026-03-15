@@ -23,15 +23,24 @@ export type PairWorksheet = {
     bbLower: number                             // Bollinger lower band
     bbPosition: number                          // 0 = at lower, 1 = at upper, 0.5 = middle
     atr14: number                               // Average True Range (absolute volatility)
+    adx14: number                               // Trend strength 0–100 (>25 trending, <20 ranging)
+    adxTrend: 'trending' | 'ranging'            // Regime label derived from ADX
     volumeRatio: number                         // current vol / 20-period avg vol
   }
   model: {
-    trendSlope: number      // per-candle price change from 20-candle linear regression
+    trendSlope: number      // per-candle price change from linear regression
     trendR2: number         // regression fit quality 0–1
     predictedNext: number   // extrapolated next candle close price
-    supportLevel: number    // lowest low over last 20 candles
-    resistanceLevel: number // highest high over last 20 candles
+    supportLevel: number    // most recent significant swing pivot low
+    resistanceLevel: number // most recent significant swing pivot high
     volatilityPct: number   // ATR14 as percentage of current price
+  }
+  /** Optional higher-timeframe context, populated when 4h candles are available */
+  context?: {
+    trend4h: 'bullish' | 'bearish' | 'neutral'
+    adx4h: number
+    ema20_4h: number
+    ema50_4h: number
   }
 }
 
@@ -40,9 +49,11 @@ export type EntryMathSnapshot = {
   price: number
   rsi14: number
   emaTrend: 'bullish' | 'bearish' | 'neutral'
+  adxTrend: 'trending' | 'ranging'
   macdHistogram: number
   bbPosition: number
   trendSlope: number
   trendR2: number
   volatilityPct: number
+  trend4h?: 'bullish' | 'bearish' | 'neutral'
 }

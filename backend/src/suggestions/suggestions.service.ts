@@ -102,7 +102,7 @@ export class SuggestionsService {
             volume24h: coin.volume24h,
           };
           try {
-            const candleMap = await this.binance.getCandlesForPairs([coin.pair], '1h', 48);
+            const candleMap = await this.binance.getCandlesForPairs([coin.pair], '1h', 200);
             const candles = candleMap[coin.pair];
             if (!candles?.length) {
               results[idx] = base;

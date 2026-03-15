@@ -133,7 +133,7 @@ export class TradingAgentService {
       ? await this.pairKnowledge.findForPairs(userId, allPairs)
       : [];
 
-    const candlesMap = await this.binance.getCandlesForPairs(allPairs, '1h', 48);
+    const candlesMap = await this.binance.getCandlesForPairs(allPairs, '1h', 200);
 
     const priceMap: Record<string, number> = {};
     await Promise.all(
