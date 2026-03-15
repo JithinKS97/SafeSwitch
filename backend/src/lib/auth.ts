@@ -8,7 +8,21 @@ import { Resend } from 'resend';
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
-console.log('[Auth] init: BETTER_AUTH_SECRET:', !!process.env.BETTER_AUTH_SECRET, 'baseURL:', process.env.BETTER_AUTH_URL, 'RESEND_API_KEY:', !!process.env.RESEND_API_KEY, 'RESEND_FROM_EMAIL:', process.env.RESEND_FROM_EMAIL ?? '(default)');
+const trustedOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3001',
+  ...(process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()) : []),
+];
+console.log('[Auth] init:', {
+  BETTER_AUTH_SECRET: !!process.env.BETTER_AUTH_SECRET,
+  baseURL: process.env.BETTER_AUTH_URL ?? '(default)',
+  RESEND_API_KEY: !!process.env.RESEND_API_KEY,
+  RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL ?? '(default)',
+  trustedOrigins,
+  crossSubDomainCookies: !!process.env.CORS_ORIGINS,
+});
 
 function getResend() {
   const key = process.env.RESEND_API_KEY;
@@ -60,13 +74,7 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:3001',
   basePath: '/api/auth',
-  trustedOrigins: [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3001',
-    ...(process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()) : []),
-  ],
+  trustedOrigins,
   advanced: process.env.CORS_ORIGINS
     ? {
         useSecureCookies: true,

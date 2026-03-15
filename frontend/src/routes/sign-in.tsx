@@ -37,10 +37,12 @@ function SignInPage() {
     setError(null)
     setLoading(true)
     try {
+      console.log('[Auth] sendVerificationOtp request:', { email })
       const { error: err } = await authClient.emailOtp.sendVerificationOtp({
         email,
         type: 'sign-in',
       })
+      console.log('[Auth] sendVerificationOtp response:', { hasError: !!err, error: err })
       if (err) {
         const msg =
           err.message ??
@@ -67,16 +69,21 @@ function SignInPage() {
     setError(null)
     setLoading(true)
     try {
+      console.log('[Auth] signIn.emailOtp request:', { email, otpLength: otp.length })
       const { data, error: err } = await authClient.signIn.emailOtp({
         email,
         otp,
       })
+      console.log('[Auth] signIn.emailOtp response:', { hasData: !!data, hasError: !!err, error: err })
       if (err) {
         const msg = err.message ?? 'Invalid or expired code'
         throw new Error(msg)
       }
       if (data) {
+        console.log('[Auth] signIn success, navigating to /')
         navigate({ to: '/' })
+      } else {
+        console.log('[Auth] signIn returned no data, not navigating')
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Something went wrong'

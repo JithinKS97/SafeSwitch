@@ -29,6 +29,19 @@ async function bootstrap() {
     next();
   });
 
+  // Debug: log auth requests
+  expressApp.use((req, res, next) => {
+    if (req.path?.startsWith('/api/auth')) {
+      const hasCookie = !!req.headers.cookie;
+      console.log('[Auth] request:', req.method, req.path, 'origin:', req.get('origin'), 'hasCookie:', hasCookie);
+      res.on('finish', () => {
+        const setCookie = res.getHeader('Set-Cookie');
+        console.log('[Auth] response:', req.method, req.path, 'status:', res.statusCode, 'Set-Cookie:', !!setCookie);
+      });
+    }
+    next();
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }),
   );

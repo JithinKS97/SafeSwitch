@@ -8,7 +8,7 @@ import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { nitro } from 'nitro/vite'
 
-const backend = 'http://localhost:3001'
+const backend = process.env.VITE_API_URL ?? 'http://localhost:3001'
 
 const config = defineConfig({
   server: {

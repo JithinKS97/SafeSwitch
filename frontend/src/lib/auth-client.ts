@@ -1,10 +1,13 @@
 import { createAuthClient } from 'better-auth/react'
 import { emailOTPClient } from 'better-auth/client/plugins'
 
-// Hit backend directly; Vite proxy returns 404 for /api with TanStack Start + Nitro
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
+// Use same-origin so cookies work. Vite proxy (dev) and Nitro routeRules (prod) forward /api/auth/* to backend.
+const baseURL = ''
+if (typeof window !== 'undefined') {
+  console.log('[Auth] authClient baseURL:', baseURL || '(same-origin)', 'origin:', window.location.origin)
+}
 export const authClient = createAuthClient({
-  baseURL: API_URL,
+  baseURL,
   plugins: [emailOTPClient()],
   fetchOptions: {
     credentials: 'include',
