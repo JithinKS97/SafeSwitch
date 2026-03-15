@@ -1,8 +1,17 @@
 import { useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
-import { authClient, setStoredToken } from '../lib/auth-client'
+import { createFileRoute, redirect, useNavigate, useSearch } from '@tanstack/react-router'
+import { authClient, getStoredToken, setStoredToken } from '../lib/auth-client'
+import { getSession } from '../lib/auth.functions'
 
 export const Route = createFileRoute('/sign-in')({
+  validateSearch: (search: Record<string, unknown>) => ({
+    redirect: typeof search.redirect === 'string' ? search.redirect : '/',
+  }),
+  beforeLoad: async ({ search }) => {
+    const token = getStoredToken()
+    const session = await getSession(token)
+    if (session?.user) throw redirect({ to: search.redirect })
+  },
   component: SignInPage,
 })
 
@@ -25,6 +34,8 @@ const FEATURES = [
 ]
 
 function SignInPage() {
+  const navigate = useNavigate()
+  const { redirect: redirectTo } = useSearch({ from: '/sign-in' })
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -81,8 +92,7 @@ function SignInPage() {
       if (data) {
         const token = (data as { token?: string }).token
         if (token) setStoredToken(token)
-        console.log('[Auth] signIn success, redirecting to /')
-        window.location.href = '/'
+        navigate({ to: redirectTo, replace: true })
       } else {
         console.log('[Auth] signIn returned no data, not navigating')
       }

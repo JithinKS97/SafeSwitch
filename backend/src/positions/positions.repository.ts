@@ -160,6 +160,29 @@ export class PositionsRepository {
     });
   }
 
+  /** Create a new INACTIVE (watching) position from a closed position so the agent can re-enter. */
+  createWatchingFromClosed(params: {
+    userId: string;
+    pair: string;
+    direction: 'LONG' | 'SHORT';
+    riskAppetite: string;
+    amount: number;
+    instruction?: string;
+    mode?: 'PAPER' | 'LIVE';
+  }) {
+    return this.prisma.position.create({
+      data: {
+        userId: params.userId,
+        pair: params.pair,
+        direction: params.direction,
+        riskAppetite: params.riskAppetite as 'LOW' | 'MEDIUM' | 'HIGH',
+        amount: Math.max(0, params.amount),
+        instruction: params.instruction ?? '',
+        mode: params.mode ?? 'PAPER',
+      },
+    });
+  }
+
   activate(id: string) {
     return this.prisma.position.update({
       where: { id },

@@ -5,11 +5,14 @@ import { getSession } from '../lib/auth.functions'
 import { getStoredToken } from '../lib/auth-client'
 
 export const Route = createFileRoute('/_authenticated')({
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     const token = getStoredToken()
     const session = await getSession(token)
     console.log('[Auth] _authenticated beforeLoad:', { hasSession: !!session, hasUser: !!session?.user })
-    if (!session?.user) throw redirect({ to: '/sign-in' })
+    if (!session?.user) {
+      const from = location.pathname || '/'
+      throw redirect({ to: '/sign-in', search: { redirect: from } })
+    }
   },
   component: AuthenticatedLayout,
 })

@@ -209,6 +209,22 @@ export class TradingAgentService {
         closeDecision.reasoning ?? 'Exited position.',
         { pnl: pnlPct, closeReason: reason },
       );
+
+      // Auto re-watch: put pair back into watching so agent can re-enter without manual trigger
+      const newAmount = Math.max(0, (pos.amount ?? 0) * (1 + pnlPct / 100));
+      if (reason === CloseReason.PROFIT_TARGET) {
+        await this.positions.createWatchingFromClosed({
+          userId,
+          pair: pos.pair,
+          direction: pos.direction,
+          riskAppetite: (pos as any).riskAppetite ?? 'MEDIUM',
+          amount: newAmount,
+          instruction: (pos as any).instruction,
+          mode,
+        });
+      } else {
+        await this.positions.resume(pos.id);
+      }
     }
 
     // 9. Add OBSERVE entry for each pair that had no ENTER/EXIT this cycle (price + agent thoughts)
