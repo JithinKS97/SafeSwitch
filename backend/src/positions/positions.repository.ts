@@ -222,13 +222,6 @@ export class PositionsRepository {
     });
   }
 
-  stop(id: string, reason: CloseReason) {
-    return this.prisma.position.update({
-      where: { id },
-      data: { status: PositionStatus.STOPPED, closeReason: reason, closedAt: new Date() },
-    });
-  }
-
   delete(id: string) {
     return this.prisma.position.delete({ where: { id } });
   }
