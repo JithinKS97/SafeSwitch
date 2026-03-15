@@ -276,9 +276,7 @@ export function PositionRow({
                 const amt = position.amount ?? 0
                 const pct = displayPnl
                 const amountWasUpdated =
-                  (isClosed || isPaused) &&
-                  position.closeReason &&
-                  position.closeReason !== 'MANUAL'
+                  (isClosed || isPaused) && !!position.closeReason
                 const invested =
                   showPnl && pct !== 0 && amountWasUpdated ? amt / (1 + pct / 100) : amt
                 const gainedLost = showPnl ? (invested * pct) / 100 : 0

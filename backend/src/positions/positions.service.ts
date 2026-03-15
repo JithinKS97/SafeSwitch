@@ -3,11 +3,14 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PositionStatus, TradingMode, CloseReason } from '../common/types/enums';
 import { PositionsRepository } from './positions.repository';
 import { BinanceService } from '../binance/binance.service';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { ExecutionService } from '../execution/execution.service';
 import { CreatePositionDto } from './dto/create-position.dto';
 
 @Injectable()
@@ -16,6 +19,8 @@ export class PositionsService {
     private readonly repo: PositionsRepository,
     private readonly binance: BinanceService,
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => ExecutionService))
+    private readonly execution: ExecutionService,
   ) {}
 
   async findAll(userId: string) {
@@ -86,14 +91,52 @@ export class PositionsService {
     if (position.status !== PositionStatus.ACTIVE) {
       throw new BadRequestException('Only active positions can be stopped');
     }
-    return this.repo.stop(id, CloseReason.MANUAL);
+    // Use ExecutionService so amount/pnl are updated (PAPER) or real order is placed (LIVE)
+    const entryPrice = position.entryPrice ?? 0;
+    let currentPrice = position.currentPrice ?? 0;
+    try {
+      currentPrice = await this.binance.getCurrentPrice(position.pair);
+    } catch {
+      // keep 0 or existing if fetch fails
+    }
+    const pnl =
+      entryPrice && currentPrice
+        ? position.direction === 'LONG'
+          ? ((currentPrice - entryPrice) / entryPrice) * 100
+          : ((entryPrice - currentPrice) / entryPrice) * 100
+        : 0;
+    const mode = (position as { mode?: 'PAPER' | 'LIVE' }).mode ?? 'PAPER';
+    await this.execution.exit(id, CloseReason.MANUAL, pnl, currentPrice, mode);
+    const updated = await this.repo.findById(id, userId);
+    return updated!;
   }
 
-  // Pause: works from Watching (INACTIVE) or Open (ACTIVE) — tells agent to ignore this pair
+  // Pause: works from Watching (INACTIVE) or Open (ACTIVE) — tells agent to ignore this pair.
+  // When ACTIVE, close the position and update amount/pnl (same as stop).
   async pause(id: string, userId: string) {
     const position = await this.findById(id, userId);
     if (position.status === PositionStatus.STOPPED || position.status === PositionStatus.COMPLETED) {
       throw new BadRequestException('Position is already paused or closed');
+    }
+    if (position.status === PositionStatus.ACTIVE) {
+      // Close the open position and update amount
+      const entryPrice = position.entryPrice ?? 0;
+      let currentPrice = position.currentPrice ?? 0;
+      try {
+        currentPrice = await this.binance.getCurrentPrice(position.pair);
+      } catch {
+        // keep 0 or existing if fetch fails
+      }
+      const pnl =
+        entryPrice && currentPrice
+          ? position.direction === 'LONG'
+            ? ((currentPrice - entryPrice) / entryPrice) * 100
+            : ((entryPrice - currentPrice) / entryPrice) * 100
+          : 0;
+      const mode = (position as { mode?: 'PAPER' | 'LIVE' }).mode ?? 'PAPER';
+      await this.execution.exit(id, CloseReason.MANUAL, pnl, currentPrice, mode);
+      const updated = await this.repo.findById(id, userId);
+      return updated!;
     }
     return this.repo.pause(id);
   }
