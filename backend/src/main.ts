@@ -63,7 +63,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const port = process.env.PORT ?? 3001;
+  const port = process.env.PORT ?? 8080;
   await app.listen(port, '0.0.0.0');
   console.log(`[Backend] Listening on port ${port}`);
 }
