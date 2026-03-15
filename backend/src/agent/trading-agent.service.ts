@@ -9,6 +9,8 @@ import { AgentInstructionRepository } from './agent-instruction.repository';
 import { PAIR_KNOWLEDGE_ENGINE, type PairKnowledgeEngine } from '../pair-knowledge/pair-knowledge.interface';
 import { IndicatorsService } from '../indicators/indicators.service';
 import type { PairWorksheet } from '../indicators/indicators.types';
+import { SIGNAL_ENGINE, type SignalEngine } from '../signals/signal-engine.interface';
+import type { PairSignal } from '../signals/signal.types';
 import { CloseReason } from '../common/types/enums';
 
 type AgentDecision = {
@@ -44,6 +46,7 @@ export class TradingAgentService {
     private readonly instructionRepo: AgentInstructionRepository,
     private readonly indicators: IndicatorsService,
     @Inject(PAIR_KNOWLEDGE_ENGINE) private readonly pairKnowledge: PairKnowledgeEngine,
+    @Inject(SIGNAL_ENGINE) private readonly signalEngine: SignalEngine,
   ) {
     this.schedulerEnabled = true;
   }
@@ -161,7 +164,16 @@ export class TradingAgentService {
       }),
     );
 
-    // 8. Build prompt using worksheets (not raw candles)
+    // 7b. Compute signal scores from worksheets (pure math, no AI)
+    const signalMap = new Map<string, PairSignal>();
+    for (const [pair, ws] of worksheetMap) {
+      // Score both directions; pick the higher-conviction one for display
+      const long = this.signalEngine.score(pair, ws, 'LONG');
+      const short = this.signalEngine.score(pair, ws, 'SHORT');
+      signalMap.set(pair, long.score >= short.score ? long : short);
+    }
+
+    // 8. Build prompt using worksheets + signal scores
     const prompt = this.buildPrompt(
       cycleNum,
       userInstruction,
@@ -172,6 +184,7 @@ export class TradingAgentService {
       pairJournals,
       worksheetMap,
       priceMap,
+      signalMap,
     );
 
     // 9. Call AI
@@ -322,6 +335,7 @@ export class TradingAgentService {
     }>,
     worksheetMap: Map<string, PairWorksheet>,
     priceMap: Record<string, number>,
+    signalMap: Map<string, PairSignal>,
   ): string {
     const journalSection =
       recentJournal.length === 0
@@ -381,8 +395,13 @@ export class TradingAgentService {
         : pairJournals
             .map((pj) => {
               const ws = worksheetMap.get(pj.pair);
+              const sig = signalMap.get(pj.pair);
+              const signalLine = sig
+                ? `  Signal score: ${sig.score}/100 ${sig.direction} [${sig.label}] — ${sig.summary}\n    Components: trend=${sig.components.trend} momentum=${sig.components.momentum} oscillator=${sig.components.oscillator} model=${sig.components.model} volume=${sig.components.volume}`
+                : '';
               const worksheetBlock = ws
                 ? [
+                    signalLine,
                     `  Indicators:`,
                     `    RSI(14)=${ws.indicators.rsi14} | EMA trend=${ws.indicators.emaTrend} (ema20=${ws.indicators.ema20} vs ema50=${ws.indicators.ema50})`,
                     `    MACD histogram=${ws.indicators.macdHistogram > 0 ? '+' : ''}${ws.indicators.macdHistogram} (${ws.indicators.macdHistogram > 0 ? 'bullish' : ws.indicators.macdHistogram < 0 ? 'bearish' : 'neutral'} momentum)`,
@@ -391,7 +410,7 @@ export class TradingAgentService {
                     `  Trend model (20-candle regression):`,
                     `    Slope=${ws.model.trendSlope > 0 ? '+' : ''}${ws.model.trendSlope}/candle | R²=${ws.model.trendR2} | predicted next close=${ws.model.predictedNext}`,
                     `    Support=${ws.model.supportLevel} | Resistance=${ws.model.resistanceLevel}`,
-                  ].join('\n')
+                  ].filter(Boolean).join('\n')
                 : '  No worksheet computed yet.';
 
               const recent = pj.entries.slice(0, 5);
@@ -443,15 +462,21 @@ ${openSection}
 ${pairAnalysisSection}
 
 --- HOW TO THINK AND DECIDE ---
-For each pair, work through these steps in your journal:
-1. MARKET READ: What do the indicators say? (RSI overbought/oversold? EMA trend direction? MACD momentum? Bollinger position? Volume confirmation?)
-2. TREND MODEL: What does the regression slope say about direction and strength (R²)? Where is price relative to support/resistance?
-3. HISTORY REVIEW: What happened in past cycles for this pair? Did previous entries at similar indicator levels work out? What patterns have emerged?
-4. DECISION: Based on the above, what is the right action? Enter, hold, close, or observe — and why specifically?
+Each pair now has a pre-computed Signal Score (0–100). This score is pure math — it already weighs EMA trend, MACD momentum, RSI+Bollinger oscillator, regression model, and volume. Use it as your starting point, not a replacement for your own reasoning.
 
-For WATCHING pairs: enter only when indicators clearly align (e.g. RSI recovering from oversold + bullish EMA cross + positive MACD).
-For OPEN positions: close with PROFIT_TARGET if momentum is fading near resistance; close with DRAWDOWN_LIMIT if trend has reversed and indicators confirm it.
-When mode is LIVE (real money), apply extra caution — require stronger confirmation before entering or exiting.
+For each pair, work through these steps:
+1. SIGNAL READ: What is the signal score and label? Does it confirm or conflict with the position direction?
+2. INDICATOR DRILL-DOWN: What do the individual indicators say? (RSI overbought/oversold? EMA cross? MACD momentum? Bollinger position?)
+3. TREND MODEL: What does the regression slope say about direction and strength (R²)? Where is price relative to support/resistance?
+4. HISTORY REVIEW: What happened in past cycles? Did previous entries at similar signal levels work out? What patterns have emerged?
+5. DECISION: Based on signal + indicators + history, what is the right action and why?
+
+Signal thresholds to guide you:
+- STRONG_BUY (≥78) / BUY (≥62) in LONG direction → strong case to enter a LONG watching position
+- STRONG_SELL (≤25) / SELL (≤40) in SHORT direction → strong case to enter a SHORT watching position
+- Signal score dropping below 40 on an OPEN LONG → consider DRAWDOWN_LIMIT exit if history confirms
+- Signal score above 80 while near resistance on OPEN LONG → consider PROFIT_TARGET exit
+When mode is LIVE (real money), apply extra caution — require STRONG_BUY/STRONG_SELL signal plus indicator confirmation before acting.
 
 --- INSTRUCTIONS ---
 1. For each enter or close, provide "reasoning" that explicitly references the indicators and history that drove the decision.

@@ -112,24 +112,34 @@ export class DefaultSuggestionEngineService implements SuggestionEngine {
       HIGH: 'aggressive — small caps and meme coins acceptable, short-term trades, high volatility ok',
     };
 
+    const hasSignals = input.marketData.some((c) => c.signalScore != null);
+
     const marketLines = input.marketData
-      .map(
-        (c) =>
-          `${c.pair} | price: $${c.price.toLocaleString()} | 24h: ${c.change24h >= 0 ? '+' : ''}${c.change24h.toFixed(2)}% | vol: $${(c.volume24h / 1e6).toFixed(0)}M`,
-      )
+      .map((c) => {
+        const base = `${c.pair} | price: $${c.price.toLocaleString()} | 24h: ${c.change24h >= 0 ? '+' : ''}${c.change24h.toFixed(2)}% | vol: $${(c.volume24h / 1e6).toFixed(0)}M`;
+        if (c.signalScore != null) {
+          return `${base} | signal: ${c.signalScore}/100 ${c.signalDirection ?? ''} [${c.signalLabel ?? ''}] — ${c.signalSummary ?? ''}`;
+        }
+        return base;
+      })
       .join('\n');
+
+    const signalNote = hasSignals
+      ? `\nSignal scores (0–100) are pre-computed from technical indicators (EMA trend, MACD momentum, RSI, Bollinger bands, regression model, volume). Higher score = stronger mathematical conviction. Pairs are listed with highest signals first. Use these scores to inform your picks — don't just pick the top 3 blindly; consider which signals best match the risk appetite.\n`
+      : '';
 
     return `You are a crypto trading advisor. Analyse the market data below and suggest exactly 3 trading pairs.
 
 Risk appetite: ${input.riskPct}/10 (${input.riskAppetite} — ${riskDescriptions[input.riskAppetite]})
-
-Current market data (top 30 by market cap):
+${signalNote}
+Current market data (top 30 by market cap, sorted by signal strength where available):
 ${marketLines}
 
 Instructions:
-1. Write a short analysis (3-5 sentences) explaining what you observe in the market data and how the risk level (${input.riskPct}/10) shapes your picks.
+1. Write a short analysis (3-5 sentences) explaining what you observe in the market data${hasSignals ? ', what the signal scores indicate,' : ''} and how the risk level (${input.riskPct}/10) shapes your picks.
 2. Then select exactly 3 pairs that best fit this risk level.
 3. For each pair, direction must be "LONG" or "SHORT", riskLevel must be "${input.riskAppetite}".
+${hasSignals ? '4. Prefer pairs where the signal direction matches the trade direction and the score is strong for the risk level (HIGH risk can tolerate lower scores; LOW risk should prefer clearer signals).' : ''}
 
 Respond ONLY with valid JSON in this exact shape, no markdown fences, no extra text:
 {

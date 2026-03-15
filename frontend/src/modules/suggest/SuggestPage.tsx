@@ -82,6 +82,16 @@ export function SuggestPage() {
     },
   })
 
+  const refreshSnapshot = useMutation({
+    mutationFn: (id: string) => api.suggestions.refresh(id),
+    onSuccess: (data) => {
+      setResult(data)
+      setSelectedId(data.id ?? null)
+      setAdded(new Set())
+      qc.invalidateQueries({ queryKey: ['suggestions', 'history'] })
+    },
+  })
+
   const deleteSnapshot = useMutation({
     mutationFn: (id: string) => api.suggestions.delete(id),
     onMutate: async (id) => {
@@ -246,6 +256,17 @@ export function SuggestPage() {
                 {selectedHistory && (
                   <span className="text-xs text-zinc-400">· {formatDate(selectedHistory.createdAt)}</span>
                 )}
+                <div className="ml-auto">
+                  {selectedId && (
+                    <button
+                      onClick={() => refreshSnapshot.mutate(selectedId)}
+                      disabled={refreshSnapshot.isPending}
+                      className="rounded px-2.5 py-1 text-xs font-medium border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition"
+                    >
+                      {refreshSnapshot.isPending ? 'Refreshing…' : '↻ Refresh'}
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 px-4 py-3">

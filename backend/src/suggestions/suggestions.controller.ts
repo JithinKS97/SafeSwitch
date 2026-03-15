@@ -42,6 +42,12 @@ export class SuggestionsController {
     return result;
   }
 
+  @Post(':id/refresh')
+  @HttpCode(HttpStatus.OK)
+  refresh(@Param('id') id: string, @UserId() userId: string): Promise<SuggestionsResponse> {
+    return this.service.refresh(id, userId);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   delete(@Param('id') id: string, @UserId() userId: string): Promise<void> {

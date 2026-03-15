@@ -111,6 +111,8 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ riskPct }),
       }),
+    refresh: (id: string) =>
+      request<SuggestionsResponse>(`/suggestions/${id}/refresh`, { method: 'POST' }),
     history: () => request<SnapshotSummary[]>('/suggestions'),
     getById: (id: string) => request<SuggestionsResponse>(`/suggestions/${id}`),
     delete: (id: string) => request<void>(`/suggestions/${id}`, { method: 'DELETE' }),

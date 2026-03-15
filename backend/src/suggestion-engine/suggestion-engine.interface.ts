@@ -16,10 +16,19 @@ export type MarketDataPoint = {
   volume24h: number
 }
 
+export type ScoredMarketDataPoint = MarketDataPoint & {
+  /** Pre-computed signal score 0–100. Present when candles were available. */
+  signalScore?: number
+  signalDirection?: TradeDirection
+  signalLabel?: string
+  signalSummary?: string
+}
+
 export type SuggestionInput = {
   riskPct: number
   riskAppetite: RiskAppetite
-  marketData: MarketDataPoint[]
+  /** Market data, optionally pre-ranked by signal score (highest first). */
+  marketData: ScoredMarketDataPoint[]
 }
 
 export type SuggestionItem = {
