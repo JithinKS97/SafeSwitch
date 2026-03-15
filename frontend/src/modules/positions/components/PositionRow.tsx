@@ -206,7 +206,7 @@ export function PositionRow({
     isOpen ||
     isClosed ||
     (isPaused && (position.entryPrice != null || hasCompletedTrade)) ||
-    (isWatching && hasCompletedTrade)
+    (isWatching && hasCompletedTrade && position.entryPrice != null)
   const displayPnl = isOpen ? totalRealizedPnl + position.pnl : totalRealizedPnl || position.pnl || 0
   const { text: statusText, style: statusStyle } = STATUS_LABEL[position.status] ?? {
     text: position.status,
