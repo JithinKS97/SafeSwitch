@@ -9,7 +9,6 @@ import {
 import { PositionStatus, TradingMode, CloseReason } from '../common/types/enums';
 import { PositionsRepository } from './positions.repository';
 import { BinanceService } from '../binance/binance.service';
-import { PrismaService } from '../common/prisma/prisma.service';
 import { ExecutionService } from '../execution/execution.service';
 import { CreatePositionDto } from './dto/create-position.dto';
 
@@ -18,7 +17,6 @@ export class PositionsService {
   constructor(
     private readonly repo: PositionsRepository,
     private readonly binance: BinanceService,
-    private readonly prisma: PrismaService,
     @Inject(forwardRef(() => ExecutionService))
     private readonly execution: ExecutionService,
   ) {}
@@ -161,10 +159,9 @@ export class PositionsService {
   }
 
   async delete(id: string, userId: string) {
-    const position = await this.findById(id, userId);
+    await this.findById(id, userId); // ownership check
     await this.repo.delete(id);
-    await this.prisma.pairJournal.deleteMany({
-      where: { userId, pair: position.pair },
-    });
+    // Pair journal is retained — it holds the agent's learned knowledge for this pair
+    // and will be picked up automatically if the pair is re-added later.
   }
 }

@@ -321,13 +321,22 @@ export function PositionRow({
             {(isWatching || isOpen) && (
               <>
                 {position.mode === 'PAPER' ? (
-                  <Btn
+                  <button
                     onClick={() => window.confirm(`Switch ${position.pair} to LIVE trading? Real funds will be used.`) && switchMode.mutate('LIVE')}
                     disabled={switchMode.isPending}
-                    variant="ghost"
+                    title={
+                      pairJournal && pairJournal.confidence >= 70
+                        ? `Agent confidence is ${pairJournal.confidence.toFixed(0)}% — ready for live trading`
+                        : 'Switch to live trading'
+                    }
+                    className={`inline-flex shrink-0 items-center whitespace-nowrap rounded px-2.5 py-1 text-xs font-medium transition disabled:opacity-40 cursor-pointer ${
+                      pairJournal && pairJournal.confidence >= 70
+                        ? 'border border-amber-400 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 shadow-[0_0_6px_1px_rgba(251,191,36,0.35)]'
+                        : 'border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    }`}
                   >
-                    {switchMode.isPending ? '…' : 'Go live'}
-                  </Btn>
+                    {switchMode.isPending ? '…' : pairJournal && pairJournal.confidence >= 70 ? '★ Go live' : 'Go live'}
+                  </button>
                 ) : (
                   <Btn
                     onClick={() => switchMode.mutate('PAPER')}
