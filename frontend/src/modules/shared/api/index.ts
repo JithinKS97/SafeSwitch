@@ -17,6 +17,7 @@ export type Position = {
   pair: string
   direction: TradeDirection
   riskAppetite: RiskAppetite
+  amount: number
   status: PositionStatus
   mode: TradingMode
   confidence: number
@@ -64,16 +65,17 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const err = await res.json().catch(() => ({ error: 'Request failed' }))
     throw new Error(err.error ?? 'Request failed')
   }
+  if (res.status === 204) return undefined as T
   return res.json()
 }
 
 export const api = {
   positions: {
     list: () => request<Position[]>('/positions'),
-    create: (pair: string, direction: TradeDirection, riskAppetite: RiskAppetite) =>
+    create: (pair: string, direction: TradeDirection, riskAppetite: RiskAppetite, amount: number) =>
       request<Position>('/positions', {
         method: 'POST',
-        body: JSON.stringify({ pair, direction, riskAppetite }),
+        body: JSON.stringify({ pair, direction, riskAppetite, amount }),
       }),
     activate: (id: string) =>
       request<Position>(`/positions/${id}/activate`, { method: 'POST' }),
@@ -84,6 +86,12 @@ export const api = {
       }),
     stop: (id: string) =>
       request<Position>(`/positions/${id}/stop`, { method: 'POST' }),
+    pause: (id: string) =>
+      request<Position>(`/positions/${id}/pause`, { method: 'POST' }),
+    resume: (id: string) =>
+      request<Position>(`/positions/${id}/resume`, { method: 'POST' }),
+    reopen: (id: string) =>
+      request<Position>(`/positions/${id}/resume`, { method: 'POST' }),
     delete: (id: string) =>
       request<void>(`/positions/${id}`, { method: 'DELETE' }),
   },
@@ -95,5 +103,60 @@ export const api = {
       }),
     history: () => request<SnapshotSummary[]>('/suggestions'),
     getById: (id: string) => request<SuggestionsResponse>(`/suggestions/${id}`),
+    delete: (id: string) => request<void>(`/suggestions/${id}`, { method: 'DELETE' }),
   },
+  user: {
+    clearAllData: () => request<void>('/user/data', { method: 'DELETE' }),
+  },
+  agent: {
+    status: () => request<SchedulerStatus>('/agent/status'),
+    instruction: () => request<{ instruction: string }>('/agent/instruction'),
+    setInstruction: (instruction: string) =>
+      request<{ instruction: string }>('/agent/instruction', {
+        method: 'PATCH',
+        body: JSON.stringify({ instruction }),
+      }),
+    setScheduler: (enabled: boolean) =>
+      request<SchedulerStatus>('/agent/scheduler', {
+        method: 'PATCH',
+        body: JSON.stringify({ enabled }),
+      }),
+    run: () => request<CycleResult>('/agent/run', { method: 'POST' }),
+  },
+  pairJournals: {
+    list: () => request<PairJournal[]>('/pair-journals'),
+    byPair: (pair: string) =>
+      request<PairJournal | null>(`/pair-journals/${encodeURIComponent(pair)}`),
+  },
+}
+
+export type SchedulerStatus = {
+  schedulerActive: boolean
+  nextRunAt: string
+  intervalMinutes: number
+}
+
+export type CycleResult = {
+  cycleNum: number
+  opened: string[]
+  closed: string[]
+  journal: string
+}
+
+export type PairJournalEntry = {
+  id: string
+  cycleNum: number
+  action: string
+  reasoning: string
+  outcome: { pnl: number; closeReason: string } | null
+  createdAt: string
+}
+
+export type PairJournal = {
+  id: string
+  pair: string
+  confidence: number
+  summarisedKnowledge: string
+  entries: PairJournalEntry[]
+  updatedAt: string
 }

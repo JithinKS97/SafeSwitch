@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -39,5 +40,11 @@ export class SuggestionsController {
     const result = await this.service.getById(id, userId);
     if (!result) throw new NotFoundException(`Snapshot ${id} not found`);
     return result;
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  delete(@Param('id') id: string, @UserId() userId: string): Promise<void> {
+    return this.service.delete(id, userId);
   }
 }

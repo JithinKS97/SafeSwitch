@@ -5,6 +5,7 @@ import {
   createRootRouteWithContext,
 } from '@tanstack/react-router'
 import { ClerkProvider } from '@clerk/tanstack-react-start'
+import { Toaster } from 'sonner'
 
 import TanStackQueryProvider from '../integrations/tanstack-query/root-provider'
 
@@ -41,6 +42,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <ClerkProvider>
           <TanStackQueryProvider>
             {children}
+            <Toaster richColors position="top-center" />
           </TanStackQueryProvider>
         </ClerkProvider>
         <Scripts />

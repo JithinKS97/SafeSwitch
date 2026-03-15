@@ -6,9 +6,19 @@ import {
 } from '@nestjs/common';
 import { PositionsService } from './positions.service';
 import { PositionsRepository } from './positions.repository';
+import { BinanceService } from '../binance/binance.service';
+import { PrismaService } from '../common/prisma/prisma.service';
 import type { CreatePositionDto } from './dto/create-position.dto';
 
 const UID = 'user_test123';
+
+const mockBinance = () => ({
+  getCurrentPrice: jest.fn(),
+});
+
+const mockPrisma = () => ({
+  pairJournal: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+});
 
 const mockRepo = () => ({
   findAll: jest.fn(),
@@ -28,6 +38,7 @@ const basePosition = {
   pair: 'BTC/USDT',
   direction: 'LONG' as const,
   riskAppetite: 'LOW' as const,
+  amount: 100,
   status: 'INACTIVE' as const,
   mode: 'PAPER' as const,
   confidence: 0,
@@ -50,6 +61,8 @@ describe('PositionsService', () => {
       providers: [
         PositionsService,
         { provide: PositionsRepository, useFactory: mockRepo },
+        { provide: BinanceService, useFactory: mockBinance },
+        { provide: PrismaService, useFactory: mockPrisma },
       ],
     }).compile();
 
@@ -74,6 +87,7 @@ describe('PositionsService', () => {
       pair: 'BTC/USDT',
       direction: 'LONG',
       riskAppetite: 'LOW',
+      amount: 100,
     };
 
     it('creates the position when no active pair exists', async () => {

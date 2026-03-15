@@ -55,6 +55,25 @@ export class PositionsController {
     return this.service.stop(id, userId);
   }
 
+  @Post(':id/pause')
+  @HttpCode(HttpStatus.OK)
+  pause(@Param('id') id: string, @UserId() userId: string) {
+    return this.service.pause(id, userId);
+  }
+
+  @Post(':id/resume')
+  @HttpCode(HttpStatus.OK)
+  resume(@Param('id') id: string, @UserId() userId: string) {
+    return this.service.resume(id, userId);
+  }
+
+  /** @deprecated use resume */
+  @Post(':id/reopen')
+  @HttpCode(HttpStatus.OK)
+  reopen(@Param('id') id: string, @UserId() userId: string) {
+    return this.service.resume(id, userId);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   delete(@Param('id') id: string, @UserId() userId: string) {

@@ -1,0 +1,143 @@
+import { Injectable, Inject } from '@nestjs/common';
+import { PrismaService } from '../common/prisma/prisma.service';
+import {
+  PAIR_KNOWLEDGE_ENGINE,
+  type PairKnowledgeEngine,
+  type PairJournalData,
+} from './pair-knowledge.interface';
+import { CONFIDENCE_CALCULATOR, type ConfidenceCalculator } from './confidence-calculator.interface';
+import { KNOWLEDGE_SUMMARIZER, type KnowledgeSummarizer } from './knowledge-summarizer.interface';
+
+@Injectable()
+export class PairKnowledgeEngineService implements PairKnowledgeEngine {
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CONFIDENCE_CALCULATOR) private readonly confidenceCalc: ConfidenceCalculator,
+    @Inject(KNOWLEDGE_SUMMARIZER) private readonly summarizer: KnowledgeSummarizer,
+  ) {}
+
+  async addEntry(
+    userId: string,
+    pair: string,
+    cycleNum: number,
+    action: 'ENTER' | 'EXIT',
+    reasoning: string,
+    outcome?: { pnl: number; closeReason: string },
+  ): Promise<void> {
+    const journal = await this.prisma.pairJournal.upsert({
+      where: { userId_pair: { userId, pair } },
+      create: { userId, pair },
+      update: {},
+    });
+    await this.prisma.pairJournalEntry.create({
+      data: {
+        pairJournalId: journal.id,
+        cycleNum,
+        action,
+        reasoning,
+        outcome: outcome ?? undefined,
+      },
+    });
+    if (action === 'EXIT' && outcome) {
+      await this.updateConfidence(journal.id);
+    }
+    await this.updateSummarisedKnowledge(journal.id, pair);
+  }
+
+  private async updateConfidence(pairJournalId: string): Promise<void> {
+    const entries = await this.prisma.pairJournalEntry.findMany({
+      where: { pairJournalId, action: 'EXIT' },
+      orderBy: { createdAt: 'asc' },
+    });
+    const outcomes = entries
+      .map((e) => e.outcome as { pnl: number; closeReason: string } | null)
+      .filter((o): o is { pnl: number; closeReason: string } => o != null);
+    const confidence = this.confidenceCalc.calculate(outcomes);
+    await this.prisma.pairJournal.update({
+      where: { id: pairJournalId },
+      data: { confidence },
+    });
+  }
+
+  private async updateSummarisedKnowledge(pairJournalId: string, pair: string): Promise<void> {
+    const journal = await this.prisma.pairJournal.findUnique({
+      where: { id: pairJournalId },
+      include: { entries: { orderBy: { createdAt: 'asc' } } },
+    });
+    if (!journal || journal.entries.length === 0) return;
+
+    const entriesForSummary = journal.entries.map((e) => ({
+      action: e.action,
+      reasoning: e.reasoning,
+      outcome: e.outcome as { pnl: number; closeReason: string } | null,
+    }));
+    const summarisedKnowledge = await this.summarizer.summarise(
+      pair,
+      entriesForSummary,
+      journal.confidence,
+    );
+    if (summarisedKnowledge) {
+      await this.prisma.pairJournal.update({
+        where: { id: pairJournalId },
+        data: { summarisedKnowledge },
+      });
+    }
+  }
+
+  async findForUser(userId: string): Promise<PairJournalData[]> {
+    const rows = await this.prisma.pairJournal.findMany({
+      where: { userId },
+      include: { entries: { orderBy: { createdAt: 'desc' } } },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return rows.map(this.toPairJournalData);
+  }
+
+  async findByPair(userId: string, pair: string): Promise<PairJournalData | null> {
+    const row = await this.prisma.pairJournal.findUnique({
+      where: { userId_pair: { userId, pair } },
+      include: { entries: { orderBy: { createdAt: 'desc' } } },
+    });
+    return row ? this.toPairJournalData(row) : null;
+  }
+
+  async findForPairs(userId: string, pairs: string[]): Promise<PairJournalData[]> {
+    const rows = await this.prisma.pairJournal.findMany({
+      where: { userId, pair: { in: pairs } },
+      include: { entries: { orderBy: { createdAt: 'desc' } } },
+    });
+    return rows.map(this.toPairJournalData);
+  }
+
+  private toPairJournalData(row: {
+    id: string
+    pair: string
+    confidence: number
+    summarisedKnowledge: string
+    updatedAt: Date
+    entries: Array<{
+      id: string
+      cycleNum: number
+      action: string
+      reasoning: string
+      outcome: unknown
+      createdAt: Date
+    }>
+  }): PairJournalData {
+    return {
+      id: row.id,
+      pair: row.pair,
+      confidence: row.confidence,
+      summarisedKnowledge: row.summarisedKnowledge ?? '',
+      updatedAt: row.updatedAt,
+      entries: row.entries.map((e) => ({
+        id: e.id,
+        cycleNum: e.cycleNum,
+        action: e.action as 'ENTER' | 'EXIT',
+        reasoning: e.reasoning,
+        outcome: e.outcome as { pnl: number; closeReason: string } | null,
+        createdAt: e.createdAt,
+      })),
+    };
+  }
+}

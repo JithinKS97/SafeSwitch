@@ -23,4 +23,8 @@ export class SuggestionsRepository {
   findById(id: string, userId: string) {
     return this.prisma.suggestionSnapshot.findFirst({ where: { id, userId } });
   }
+
+  delete(id: string, userId: string) {
+    return this.prisma.suggestionSnapshot.deleteMany({ where: { id, userId } });
+  }
 }

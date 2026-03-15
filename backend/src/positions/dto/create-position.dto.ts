@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsNumber, IsString, Min } from 'class-validator';
 import { RiskAppetite, TradeDirection } from '../../common/types/enums';
 
 export class CreatePositionDto {
@@ -11,4 +11,8 @@ export class CreatePositionDto {
 
   @IsEnum(RiskAppetite)
   riskAppetite: RiskAppetite;
+
+  @IsNumber()
+  @Min(0)
+  amount: number;
 }

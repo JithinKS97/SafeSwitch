@@ -49,7 +49,7 @@ describe('SuggestionsController', () => {
     it('passes the riskPct number to the service', async () => {
       service.getSuggestions.mockResolvedValue(mockResponse);
       await request(app.getHttpServer()).post('/suggestions').send({ riskPct: 75 });
-      expect(service.getSuggestions).toHaveBeenCalledWith(75);
+      expect(service.getSuggestions).toHaveBeenCalledWith(75, undefined);
     });
 
     it('returns 400 when riskPct is missing', async () => {

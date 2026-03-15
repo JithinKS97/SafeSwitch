@@ -26,6 +26,7 @@ const basePosition = {
   pair: 'BTC/USDT',
   direction: 'LONG',
   riskAppetite: 'LOW',
+  amount: 100,
   status: 'INACTIVE',
   mode: 'PAPER',
   confidence: 0,
@@ -91,7 +92,7 @@ describe('PositionsController', () => {
   });
 
   describe('POST /positions', () => {
-    const validBody = { pair: 'BTC/USDT', direction: 'LONG', riskAppetite: 'LOW' };
+    const validBody = { pair: 'BTC/USDT', direction: 'LONG', riskAppetite: 'LOW', amount: 100 };
 
     it('returns 201 with the created position', async () => {
       service.create.mockResolvedValue(basePosition);
@@ -114,14 +115,14 @@ describe('PositionsController', () => {
     it('returns 400 when direction is not a valid enum', async () => {
       const res = await request(app.getHttpServer())
         .post('/positions')
-        .send({ pair: 'BTC/USDT', direction: 'SIDEWAYS', riskAppetite: 'LOW' });
+        .send({ pair: 'BTC/USDT', direction: 'SIDEWAYS', riskAppetite: 'LOW', amount: 100 });
       expect(res.status).toBe(400);
     });
 
     it('returns 400 when riskAppetite is not a valid enum', async () => {
       const res = await request(app.getHttpServer())
         .post('/positions')
-        .send({ pair: 'BTC/USDT', direction: 'LONG', riskAppetite: 'EXTREME' });
+        .send({ pair: 'BTC/USDT', direction: 'LONG', riskAppetite: 'EXTREME', amount: 100 });
       expect(res.status).toBe(400);
     });
   });

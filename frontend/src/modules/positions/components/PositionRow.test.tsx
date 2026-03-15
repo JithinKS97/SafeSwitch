@@ -4,23 +4,26 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { PositionRow } from './PositionRow'
 import type { Position } from '../../shared/api'
 
+const mockPause = vi.fn().mockResolvedValue({})
+const mockResume = vi.fn().mockResolvedValue({})
+const mockDelete = vi.fn().mockResolvedValue(undefined)
+
 vi.mock('../../shared/api', () => ({
   api: {
     positions: {
-      activate:   vi.fn().mockResolvedValue({}),
-      stop:       vi.fn().mockResolvedValue({}),
-      switchMode: vi.fn().mockResolvedValue({}),
-      delete:     vi.fn().mockResolvedValue(undefined),
+      pause:  (...args: unknown[]) => mockPause(...args),
+      resume: (...args: unknown[]) => mockResume(...args),
+      delete: (...args: unknown[]) => mockDelete(...args),
     },
   },
 }))
 
-function renderRow(position: Position) {
+function renderRow(position: Position, pairJournal: { pair: string; confidence: number; entries: unknown[] } | null = null) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
       <table><tbody>
-        <PositionRow position={position} />
+        <PositionRow position={position} pairJournal={pairJournal} />
       </tbody></table>
     </QueryClientProvider>
   )
@@ -46,15 +49,14 @@ describe('PositionRow', () => {
   beforeEach(() => vi.clearAllMocks())
 
   describe('INACTIVE position', () => {
-    it('shows Activate button', () => {
+    it('shows Pause button', () => {
       renderRow(base)
-      expect(screen.getByText('Activate')).toBeInTheDocument()
+      expect(screen.getByText('Pause')).toBeInTheDocument()
     })
 
-    it('does not show Stop or Delete', () => {
+    it('shows Delete button', () => {
       renderRow(base)
-      expect(screen.queryByText('Stop')).toBeNull()
-      expect(screen.queryByText('Delete')).toBeNull()
+      expect(screen.getByText('Delete')).toBeInTheDocument()
     })
 
     it('displays the pair name', () => {
@@ -71,62 +73,34 @@ describe('PositionRow', () => {
   describe('ACTIVE PAPER position', () => {
     const active: Position = { ...base, status: 'ACTIVE', mode: 'PAPER', confidence: 55 }
 
-    it('shows → Live and Stop buttons', () => {
+    it('shows Pause and Delete buttons', () => {
       renderRow(active)
-      expect(screen.getByText('→ Live')).toBeInTheDocument()
-      expect(screen.getByText('Stop')).toBeInTheDocument()
-    })
-
-    it('does not show Activate or Delete', () => {
-      renderRow(active)
-      expect(screen.queryByText('Activate')).toBeNull()
-      expect(screen.queryByText('Delete')).toBeNull()
-    })
-  })
-
-  describe('ACTIVE LIVE position', () => {
-    const live: Position = { ...base, status: 'ACTIVE', mode: 'LIVE', confidence: 80 }
-
-    it('shows ← Paper and Stop buttons', () => {
-      renderRow(live)
-      expect(screen.getByText('← Paper')).toBeInTheDocument()
-      expect(screen.getByText('Stop')).toBeInTheDocument()
-    })
-
-    it('does not show → Live', () => {
-      renderRow(live)
-      expect(screen.queryByText('→ Live')).toBeNull()
+      expect(screen.getByText('Pause')).toBeInTheDocument()
+      expect(screen.getByText('Delete')).toBeInTheDocument()
     })
   })
 
   describe('STOPPED position', () => {
     const stopped: Position = { ...base, status: 'STOPPED' }
 
-    it('shows Delete button', () => {
+    it('shows Resume and Delete buttons', () => {
       renderRow(stopped)
+      expect(screen.getByText('Resume')).toBeInTheDocument()
       expect(screen.getByText('Delete')).toBeInTheDocument()
     })
 
-    it('does not show Activate or Stop', () => {
-      renderRow(stopped)
-      expect(screen.queryByText('Activate')).toBeNull()
-      expect(screen.queryByText('Stop')).toBeNull()
-    })
-
     it('calls api.positions.delete after confirm', async () => {
-      const { api } = await import('../../shared/api')
       vi.spyOn(window, 'confirm').mockReturnValue(true)
       renderRow(stopped)
       fireEvent.click(screen.getByText('Delete'))
-      await waitFor(() => expect(api.positions.delete).toHaveBeenCalledWith('pos-1'))
+      await waitFor(() => expect(mockDelete).toHaveBeenCalledWith('pos-1'))
     })
 
     it('does not call delete when confirm is cancelled', async () => {
-      const { api } = await import('../../shared/api')
       vi.spyOn(window, 'confirm').mockReturnValue(false)
       renderRow(stopped)
       fireEvent.click(screen.getByText('Delete'))
-      await waitFor(() => expect(api.positions.delete).not.toHaveBeenCalled())
+      await waitFor(() => expect(mockDelete).not.toHaveBeenCalled())
     })
   })
 

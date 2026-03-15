@@ -1,8 +1,9 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { SuggestionsService } from './suggestions.service';
 import { MarketDataService } from '../market-data/market-data.service';
-import { AiService } from '../ai/ai.service';
 import { SuggestionsRepository } from './suggestions.repository';
+import { SUGGESTION_ENGINE } from '../suggestion-engine/suggestion-engine.interface';
 import type { CoinSnapshot } from '../market-data/market-data.types';
 
 const UID = 'user_test123';
@@ -12,15 +13,6 @@ const mockCoins: CoinSnapshot[] = [
   { symbol: 'ETH', pair: 'ETH/USDT', price: 3500, change24h: -0.8, volume24h: 15e9, marketCap: 4e11 },
   { symbol: 'SOL', pair: 'SOL/USDT', price: 150, change24h: 4.2, volume24h: 5e9, marketCap: 6e10 },
 ];
-
-const validAiResponse = JSON.stringify({
-  analysis: 'Market is showing mixed signals. BTC holds steady with low volatility suitable for conservative risk.',
-  suggestions: [
-    { pair: 'BTC/USDT', direction: 'LONG', duration: '3-7 days', reason: 'Strong support.', riskLevel: 'LOW' },
-    { pair: 'ETH/USDT', direction: 'LONG', duration: '2-5 days', reason: 'Volume stable.', riskLevel: 'LOW' },
-    { pair: 'SOL/USDT', direction: 'LONG', duration: '1-3 days', reason: 'Breakout forming.', riskLevel: 'LOW' },
-  ],
-});
 
 const mockSavedSnapshot = {
   id: 'snap-1',
@@ -34,7 +26,7 @@ const mockSavedSnapshot = {
 describe('SuggestionsService', () => {
   let service: SuggestionsService;
   let marketData: { getTopCoins: jest.Mock };
-  let ai: { complete: jest.Mock };
+  let suggestionEngine: { suggest: jest.Mock };
   let repo: { save: jest.Mock; findAll: jest.Mock; findById: jest.Mock };
 
   beforeEach(async () => {
@@ -42,14 +34,17 @@ describe('SuggestionsService', () => {
       providers: [
         SuggestionsService,
         { provide: MarketDataService, useValue: { getTopCoins: jest.fn() } },
-        { provide: AiService, useValue: { complete: jest.fn() } },
+        {
+          provide: SUGGESTION_ENGINE,
+          useValue: { suggest: jest.fn() },
+        },
         { provide: SuggestionsRepository, useValue: { save: jest.fn(), findAll: jest.fn(), findById: jest.fn() } },
       ],
     }).compile();
 
     service = module.get(SuggestionsService);
     marketData = module.get(MarketDataService);
-    ai = module.get(AiService);
+    suggestionEngine = module.get(SUGGESTION_ENGINE);
     repo = module.get(SuggestionsRepository);
     repo.save.mockResolvedValue(mockSavedSnapshot);
   });
@@ -57,7 +52,14 @@ describe('SuggestionsService', () => {
   describe('happy path', () => {
     it('returns analysis and parsed suggestions', async () => {
       marketData.getTopCoins.mockResolvedValue(mockCoins);
-      ai.complete.mockResolvedValue(validAiResponse);
+      suggestionEngine.suggest.mockResolvedValue({
+        analysis: 'Market is showing mixed signals.',
+        suggestions: [
+          { pair: 'BTC/USDT', direction: 'LONG', duration: '3-7 days', reason: 'Strong support.', riskLevel: 'LOW' },
+          { pair: 'ETH/USDT', direction: 'LONG', duration: '2-5 days', reason: 'Volume stable.', riskLevel: 'LOW' },
+          { pair: 'SOL/USDT', direction: 'LONG', duration: '1-3 days', reason: 'Breakout forming.', riskLevel: 'LOW' },
+        ],
+      });
 
       const result = await service.getSuggestions(20, UID);
 
@@ -68,41 +70,55 @@ describe('SuggestionsService', () => {
 
     it('forces riskLevel to match the derived risk appetite', async () => {
       marketData.getTopCoins.mockResolvedValue(mockCoins);
-      ai.complete.mockResolvedValue(validAiResponse);
+      suggestionEngine.suggest.mockResolvedValue({
+        analysis: 'High risk picks.',
+        suggestions: [
+          { pair: 'PEPE/USDT', direction: 'LONG', duration: '1h', reason: 'ok', riskLevel: 'HIGH' },
+          { pair: 'WIF/USDT', direction: 'SHORT', duration: '2h', reason: 'ok', riskLevel: 'HIGH' },
+          { pair: 'DOGE/USDT', direction: 'LONG', duration: '4h', reason: 'ok', riskLevel: 'HIGH' },
+        ],
+      });
 
       const result = await service.getSuggestions(80, UID); // HIGH
       result.suggestions.forEach((s) => expect(s.riskLevel).toBe('HIGH'));
     });
 
-    it('strips markdown fences before parsing', async () => {
-      const withFences = '```json\n' + validAiResponse + '\n```';
+    it('passes riskPct and marketData to engine', async () => {
       marketData.getTopCoins.mockResolvedValue(mockCoins);
-      ai.complete.mockResolvedValue(withFences);
-
-      const result = await service.getSuggestions(20, UID);
-      expect(result.suggestions).toHaveLength(3);
-    });
-
-    it('includes the exact riskPct in the prompt', async () => {
-      marketData.getTopCoins.mockResolvedValue(mockCoins);
-      ai.complete.mockResolvedValue(validAiResponse);
+      suggestionEngine.suggest.mockResolvedValue({
+        analysis: 'Test.',
+        suggestions: [
+          { pair: 'BTC/USDT', direction: 'LONG', duration: '1d', reason: 'ok', riskLevel: 'LOW' },
+          { pair: 'ETH/USDT', direction: 'LONG', duration: '1d', reason: 'ok', riskLevel: 'LOW' },
+          { pair: 'SOL/USDT', direction: 'LONG', duration: '1d', reason: 'ok', riskLevel: 'LOW' },
+        ],
+      });
 
       await service.getSuggestions(73, UID);
 
-      const prompt: string = ai.complete.mock.calls[0][0];
-      expect(prompt).toContain('73%');
+      const input = suggestionEngine.suggest.mock.calls[0][0];
+      expect(input.riskPct).toBe(73);
+      expect(input.marketData).toHaveLength(3);
     });
 
     it('derives LOW for pct < 34', async () => {
       marketData.getTopCoins.mockResolvedValue(mockCoins);
-      ai.complete.mockResolvedValue(validAiResponse);
+      suggestionEngine.suggest.mockResolvedValue({
+        analysis: 'Low risk.',
+        suggestions: [
+          { pair: 'BTC/USDT', direction: 'LONG', duration: '1d', reason: 'ok', riskLevel: 'LOW' },
+          { pair: 'ETH/USDT', direction: 'LONG', duration: '1d', reason: 'ok', riskLevel: 'LOW' },
+          { pair: 'SOL/USDT', direction: 'LONG', duration: '1d', reason: 'ok', riskLevel: 'LOW' },
+        ],
+      });
 
       const result = await service.getSuggestions(33, UID);
       result.suggestions.forEach((s) => expect(s.riskLevel).toBe('LOW'));
     });
 
     it('derives MEDIUM for pct 34–66', async () => {
-      const mediumResponse = JSON.stringify({
+      marketData.getTopCoins.mockResolvedValue(mockCoins);
+      suggestionEngine.suggest.mockResolvedValue({
         analysis: 'Moderate market conditions.',
         suggestions: [
           { pair: 'BTC/USDT', direction: 'LONG', duration: '1d', reason: 'ok', riskLevel: 'MEDIUM' },
@@ -110,48 +126,26 @@ describe('SuggestionsService', () => {
           { pair: 'SOL/USDT', direction: 'LONG', duration: '3d', reason: 'ok', riskLevel: 'MEDIUM' },
         ],
       });
-      marketData.getTopCoins.mockResolvedValue(mockCoins);
-      ai.complete.mockResolvedValue(mediumResponse);
 
       const result = await service.getSuggestions(50, UID);
       result.suggestions.forEach((s) => expect(s.riskLevel).toBe('MEDIUM'));
     });
   });
 
-  describe('fallback behaviour', () => {
-    it('returns fallback when market data fetch fails', async () => {
+  describe('error handling', () => {
+    it('throws BadRequestException when market data fetch fails', async () => {
       marketData.getTopCoins.mockRejectedValue(new Error('CoinGecko timeout'));
 
-      const result = await service.getSuggestions(20, UID);
-      expect(result.suggestions).toHaveLength(3);
-      expect(result.analysis).toContain('fallback');
+      await expect(service.getSuggestions(20, UID)).rejects.toThrow(BadRequestException);
+      await expect(service.getSuggestions(20, UID)).rejects.toThrow('CoinGecko timeout');
     });
 
-    it('returns fallback when AI service throws', async () => {
+    it('throws BadRequestException when engine throws', async () => {
       marketData.getTopCoins.mockResolvedValue(mockCoins);
-      ai.complete.mockRejectedValue(new Error('OPENROUTER_API_KEY is not configured'));
+      suggestionEngine.suggest.mockRejectedValue(new Error('API error'));
 
-      const result = await service.getSuggestions(50, UID);
-      expect(result.suggestions).toHaveLength(3);
-      expect(result.suggestions[0].riskLevel).toBe('MEDIUM');
-    });
-
-    it('returns fallback when AI response has no JSON object', async () => {
-      marketData.getTopCoins.mockResolvedValue(mockCoins);
-      ai.complete.mockResolvedValue('Sorry, I cannot help with that.');
-
-      const result = await service.getSuggestions(80, UID);
-      expect(result.suggestions).toHaveLength(3);
-      expect(result.suggestions[0].riskLevel).toBe('HIGH');
-    });
-
-    it('returns fallback when analysis field is missing', async () => {
-      const noAnalysis = JSON.stringify({ suggestions: [] });
-      marketData.getTopCoins.mockResolvedValue(mockCoins);
-      ai.complete.mockResolvedValue(noAnalysis);
-
-      const result = await service.getSuggestions(20, UID);
-      expect(result.analysis).toContain('fallback');
+      await expect(service.getSuggestions(50, UID)).rejects.toThrow(BadRequestException);
+      await expect(service.getSuggestions(50, UID)).rejects.toThrow('API error');
     });
   });
 });

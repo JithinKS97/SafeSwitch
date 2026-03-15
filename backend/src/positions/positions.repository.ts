@@ -23,8 +23,57 @@ export class PositionsRepository {
   }
 
   findActiveByPair(pair: string, userId: string) {
+    // STOPPED = paused by user — still "belongs" to them, block re-adding
     return this.prisma.position.findFirst({
-      where: { pair, userId, status: { in: ['INACTIVE', 'ACTIVE'] } },
+      where: { pair, userId, status: { in: ['INACTIVE', 'ACTIVE', 'STOPPED'] } },
+    });
+  }
+
+  findAllInactive(userId: string) {
+    return this.prisma.position.findMany({
+      where: { userId, status: 'INACTIVE' },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  findAllActive(userId: string) {
+    return this.prisma.position.findMany({
+      where: { userId, status: 'ACTIVE' },
+      orderBy: { activatedAt: 'asc' },
+    });
+  }
+
+  // Users who have at least one pair the agent should manage (Watching or Open)
+  findAllManagedAcrossUsers() {
+    return this.prisma.position.findMany({
+      where: { status: { in: ['INACTIVE', 'ACTIVE'] } },
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+  }
+
+  activateByAgent(id: string, entryPrice: number) {
+    return this.prisma.position.update({
+      where: { id },
+      data: { status: 'ACTIVE', entryPrice, activatedAt: new Date(), agentOpened: true },
+    });
+  }
+
+  findClosed(userId: string, limit = 10) {
+    return this.prisma.position.findMany({
+      where: { userId, status: { in: ['COMPLETED', 'STOPPED'] } },
+      orderBy: { closedAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        pair: true,
+        direction: true,
+        pnl: true,
+        closeReason: true,
+        entryPrice: true,
+        currentPrice: true,
+        closedAt: true,
+      },
     });
   }
 
@@ -35,6 +84,41 @@ export class PositionsRepository {
         pair: dto.pair,
         direction: dto.direction,
         riskAppetite: dto.riskAppetite,
+        amount: dto.amount,
+      },
+    });
+  }
+
+  openByAgent(
+    pair: string,
+    direction: 'LONG' | 'SHORT',
+    riskAppetite: 'LOW' | 'MEDIUM' | 'HIGH',
+    entryPrice: number,
+    userId: string,
+  ) {
+    return this.prisma.position.create({
+      data: {
+        userId,
+        pair,
+        direction,
+        riskAppetite,
+        entryPrice,
+        status: 'ACTIVE',
+        activatedAt: new Date(),
+        agentOpened: true,
+      },
+    });
+  }
+
+  closeByAgent(id: string, reason: CloseReason, pnl: number, currentPrice: number) {
+    return this.prisma.position.update({
+      where: { id },
+      data: {
+        status: reason === CloseReason.PROFIT_TARGET ? 'COMPLETED' : 'STOPPED',
+        closeReason: reason,
+        pnl,
+        currentPrice,
+        closedAt: new Date(),
       },
     });
   }
@@ -44,6 +128,27 @@ export class PositionsRepository {
       where: { id },
       data: { status: PositionStatus.ACTIVE, activatedAt: new Date() },
     });
+  }
+
+  // Pause: user tells agent to stop managing this pair
+  pause(id: string) {
+    return this.prisma.position.update({
+      where: { id },
+      data: { status: PositionStatus.STOPPED },
+    });
+  }
+
+  // Resume: user puts pair back into "Watching" so agent manages it again
+  resume(id: string) {
+    return this.prisma.position.update({
+      where: { id },
+      data: { status: PositionStatus.INACTIVE, closeReason: null, closedAt: null, pnl: 0 },
+    });
+  }
+
+  /** @deprecated use resume() */
+  reopen(id: string) {
+    return this.resume(id);
   }
 
   switchMode(id: string, mode: TradingMode) {

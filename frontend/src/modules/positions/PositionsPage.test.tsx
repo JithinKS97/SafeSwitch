@@ -12,7 +12,14 @@ vi.mock('@tanstack/react-router', () => ({
 const mockList = vi.fn()
 
 vi.mock('../shared/api', () => ({
-  api: { positions: { list: (...args: unknown[]) => mockList(...args) } },
+  api: {
+    positions: { list: (...args: unknown[]) => mockList(...args) },
+    pairJournals: { list: () => Promise.resolve([]) },
+    agent: {
+      status: () => Promise.resolve({ schedulerActive: false, nextRunAt: new Date().toISOString(), intervalMinutes: 15 }),
+      instruction: () => Promise.resolve({ instruction: '' }),
+    },
+  },
 }))
 
 const basePosition: Position = {

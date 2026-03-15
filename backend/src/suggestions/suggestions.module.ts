@@ -3,10 +3,10 @@ import { SuggestionsController } from './suggestions.controller';
 import { SuggestionsService } from './suggestions.service';
 import { SuggestionsRepository } from './suggestions.repository';
 import { MarketDataModule } from '../market-data/market-data.module';
-import { AiModule } from '../ai/ai.module';
+import { SuggestionEngineModule } from '../suggestion-engine/suggestion-engine.module';
 
 @Module({
-  imports: [MarketDataModule, AiModule],
+  imports: [MarketDataModule, SuggestionEngineModule],
   controllers: [SuggestionsController],
   providers: [SuggestionsService, SuggestionsRepository],
 })

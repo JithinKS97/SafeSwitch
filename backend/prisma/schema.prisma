@@ -12,6 +12,7 @@ model Position {
   pair         String
   direction    TradeDirection
   riskAppetite RiskAppetite
+  amount       Float          @default(0)
   status       PositionStatus @default(INACTIVE)
   mode         TradingMode    @default(PAPER)
   confidence   Float          @default(0)
@@ -19,6 +20,7 @@ model Position {
   entryPrice   Float?
   currentPrice Float?
   closeReason  CloseReason?
+  agentOpened  Boolean        @default(false)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   activatedAt  DateTime?
@@ -27,6 +29,54 @@ model Position {
   trades       Trade[]
 
   @@map("positions")
+}
+
+model AgentJournal {
+  id        String   @id @default(uuid())
+  userId    String
+  cycleNum  Int
+  entry     String
+  decisions Json
+  createdAt DateTime @default(now())
+
+  @@map("agent_journal")
+}
+
+model PairJournal {
+  id                 String   @id @default(uuid())
+  userId             String
+  pair               String
+  confidence         Float    @default(0)
+  summarisedKnowledge String @default("")
+  updatedAt          DateTime @updatedAt
+
+  entries PairJournalEntry[]
+
+  @@unique([userId, pair])
+  @@map("pair_journals")
+}
+
+model PairJournalEntry {
+  id            String   @id @default(uuid())
+  pairJournalId String
+  cycleNum      Int
+  action        String   // "ENTER" | "EXIT"
+  reasoning     String
+  outcome       Json?    // { pnl, closeReason } when EXIT
+  createdAt     DateTime @default(now())
+
+  pairJournal PairJournal @relation(fields: [pairJournalId], references: [id], onDelete: Cascade)
+
+  @@map("pair_journal_entries")
+}
+
+model AgentInstruction {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  instruction String @default("")
+  updatedAt DateTime @updatedAt
+
+  @@map("agent_instruction")
 }
 
 model SuggestionSnapshot {
